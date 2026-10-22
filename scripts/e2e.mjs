@@ -37,6 +37,7 @@ class Cdp {
     this.id = 0;
     this.pending = new Map();
     this.errors = [];
+    this.logs = [];
     ws.addEventListener('message', event => {
       const msg = JSON.parse(event.data);
       if (msg.id && this.pending.has(msg.id)) {
@@ -50,9 +51,10 @@ class Cdp {
         const text = msg.params.exceptionDetails?.exception?.description ?? msg.params.exceptionDetails?.text ?? '';
         this.errors.push(text);
       }
-      if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
-        const text = msg.params.args?.map(a => a.value ?? a.description ?? '').join(' ');
-        this.errors.push(text);
+      if (msg.method === 'Runtime.consoleAPICalled') {
+        const text = msg.params.args?.map(a => a.value ?? a.description ?? '').join(' ') ?? '';
+        if (msg.params.type === 'error') this.errors.push(text);
+        if (this.logs.length < 400) this.logs.push(`${msg.params.type}: ${text}`.slice(0, 300));
       }
     });
   }
@@ -161,6 +163,8 @@ async function chord(cdp, mods, taps) {
 }
 
 const KEY = {
+  A: ['KeyA', 'a', 65],
+  B: ['KeyB', 'b', 66],
   C: ['KeyC', 'c', 67],
   F: ['KeyF', 'f', 70],
   H: ['KeyH', 'h', 72],
@@ -264,6 +268,29 @@ async function buildModZip() {
   return Buffer.from(zipSync(files, { level: 9 }));
 }
 
+async function holdChord(cdp, mods, taps) {
+  let mask = 0;
+  for (const mod of mods) {
+    const info = MOD_INFO[mod];
+    await keyEvent(cdp, 'keyDown', { code: info.code, key: info.key, vk: info.vk, modifiers: mask });
+    mask |= info.bit;
+  }
+  for (const tap of taps) {
+    await keyEvent(cdp, 'keyDown', { code: tap.code, key: tap.key, vk: tap.vk, modifiers: mask });
+    await sleep(45);
+  }
+  for (const tap of [...taps].reverse()) {
+    await keyEvent(cdp, 'keyUp', { code: tap.code, key: tap.key, vk: tap.vk, modifiers: mask });
+    await sleep(25);
+  }
+  for (const mod of [...mods].reverse()) {
+    const info = MOD_INFO[mod];
+    mask &= ~info.bit;
+    await keyEvent(cdp, 'keyUp', { code: info.code, key: info.key, vk: info.vk, modifiers: mask });
+  }
+  await sleep(160);
+}
+
 async function openHotkeysTab(cdp) {
   await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
   await sleep(200);
@@ -330,6 +357,23 @@ async function main() {
       return { keys, pick, modCount: (window.modDataValueZipList || []).length };
     })()`);
     console.log(`  env: ${JSON.stringify(env)}`);
+    if (process.env.HK_PROBE === 'env') {
+      const mods = await cdp.evaluate(`(() => {
+        const m = window.modSC2DataManager;
+        const c = m && m.getModLoadController ? m.getModLoadController() : null;
+        return {
+          hasManager: Boolean(m),
+          controllerKeys: c ? Object.keys(c).slice(0, 24) : null,
+          early: typeof window.__DoLHKEarly,
+          dolhk: typeof window.DoLHK,
+        };
+      })()`);
+      console.log('mods:', JSON.stringify(mods));
+      const picked = cdp.logs.filter(l => /hotkey|Hotkey|HotKeys|validateBoot|modList|initMod|inject|ModLoader =/.test(l));
+      console.log(`--- loader logs (${picked.length}/${cdp.logs.length}) ---`);
+      for (const line of picked.slice(0, 40)) console.log(`  ${line}`);
+      process.exit(0);
+    }
     if (!ready) {
       for (const text of cdp.errors.slice(0, 10)) console.log(`   ! ${String(text).slice(0, 300)}`);
       const snapshot = await cdp
@@ -616,6 +660,35 @@ async function main() {
     await combo(cdp, ['Ctrl'], 'KeyJ', 'j', 74);
     const journalOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     check('L5 sequence works in game', journalOpened === 'journal', journalOpened);
+
+    await cdp.evaluate(`closeOverlay()`);
+    await sleep(200);
+    await openHotkeysTab(cdp);
+
+    await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="traits"] .dolhk-key').click()`);
+    await sleep(140);
+    await holdChord(cdp, ['Ctrl'], [
+      { code: 'KeyA', key: 'a', vk: 65 },
+      { code: 'KeyB', key: 'b', vk: 66 },
+    ]);
+    const chordText = await cdp.evaluate(
+      `document.querySelector('.dolhk-row[data-dolhk="traits"] .dolhk-key').textContent`,
+    );
+    check('L17 held chord captured as one combination', chordText === 'Ctrl + A + B', chordText);
+    const chordStored = await cdp.evaluate(
+      `JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.traits?.join('|') ?? ''`,
+    );
+    check('L17 chord persisted as a single step', chordStored === 'Ctrl+KeyA,KeyB', chordStored);
+
+    await cdp.evaluate(`closeOverlay()`);
+    await sleep(250);
+    await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await holdChord(cdp, ['Ctrl'], [
+      { code: 'KeyA', key: 'a', vk: 65 },
+      { code: 'KeyB', key: 'b', vk: 66 },
+    ]);
+    const traitsOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
+    check('L17 chord triggers the action in game', traitsOpened === 'traits', traitsOpened);
 
     await cdp.evaluate(`closeOverlay()`);
     await sleep(200);

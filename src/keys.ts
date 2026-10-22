@@ -57,19 +57,45 @@ export function stepFromEvent(e: KeyboardEvent): string {
   return mods.join('+');
 }
 
-export function splitStep(step: string): { mods: string[]; code: string } {
+export function modsFromEvent(e: KeyboardEvent): string[] {
+  const mods: string[] = [];
+  if (e.ctrlKey) mods.push('Ctrl');
+  if (e.shiftKey) mods.push('Shift');
+  if (e.altKey) mods.push('Alt');
+  if (e.metaKey) mods.push('Meta');
+  return mods;
+}
+
+export function appendKey(step: string, code: string): string {
+  return `${step},${code}`;
+}
+
+export function splitStep(step: string): { mods: string[]; codes: string[] } {
   const parts = step.split('+');
-  const code = parts.pop() ?? '';
-  return { mods: parts, code };
+  const tail = parts.pop() ?? '';
+  return { mods: parts, codes: tail ? tail.split(',') : [] };
+}
+
+export function sameMods(a: string[], b: string[]): boolean {
+  const na = MOD_ORDER.filter(m => a.includes(m));
+  const nb = MOD_ORDER.filter(m => b.includes(m));
+  return na.length === nb.length && na.every((m, i) => m === nb[i]);
 }
 
 export function sameStep(a: string, b: string): boolean {
   const sa = splitStep(a);
   const sb = splitStep(b);
-  if (sa.code !== sb.code) return false;
-  const na = MOD_ORDER.filter(m => sa.mods.includes(m));
-  const nb = MOD_ORDER.filter(m => sb.mods.includes(m));
-  return na.length === nb.length && na.every((m, i) => m === nb[i]);
+  if (sa.codes.length !== sb.codes.length) return false;
+  if (!sa.codes.every((code, i) => code === sb.codes[i])) return false;
+  return sameMods(sa.mods, sb.mods);
+}
+
+export function stepIsPrefixOf(partial: string, full: string): boolean {
+  const p = splitStep(partial);
+  const f = splitStep(full);
+  if (!sameMods(p.mods, f.mods)) return false;
+  if (p.codes.length > f.codes.length) return false;
+  return p.codes.every((code, i) => code === f.codes[i]);
 }
 
 export function sameSequence(a: string[], b: string[]): boolean {
@@ -89,8 +115,8 @@ export function keyLabel(code: string): string {
 }
 
 export function formatStep(step: string): string {
-  const { mods, code } = splitStep(step);
-  return [...MOD_ORDER.filter(m => mods.includes(m)), keyLabel(code)].join(' + ');
+  const { mods, codes } = splitStep(step);
+  return [...MOD_ORDER.filter(m => mods.includes(m)), ...codes.map(keyLabel)].join(' + ');
 }
 
 export function formatSequence(steps: string[]): string {
@@ -98,5 +124,5 @@ export function formatSequence(steps: string[]): string {
 }
 
 export function isDigitStep(step: string): boolean {
-  return /^(Digit|Numpad)\d/.test(splitStep(step).code);
+  return splitStep(step).codes.some(code => /^(Digit|Numpad)\d/.test(code));
 }
