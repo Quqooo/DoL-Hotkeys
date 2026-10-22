@@ -81,12 +81,15 @@ function readCases(body: string): CaseGroup[] {
 }
 
 function parseOffsets(src: string): typeof DEFAULT_OFFSETS {
-  const values = [...src.matchAll(/offset\s*=\s*(\d+)/g)]
-    .map(match => Number(match[1]))
-    .filter(value => value > 0);
-  if (values.length < 3) return DEFAULT_OFFSETS;
-  const [shift, ctrl, alt] = values;
-  return { shift, ctrl, alt };
+  const grab = (key: string): number => {
+    const match = new RegExp(`${key}\\s*\\?\\s*(-?\\d+)`).exec(src);
+    return match ? Number(match[1]) : Number.NaN;
+  };
+  const shift = grab('shiftKey');
+  const ctrl = grab('ctrlKey');
+  const alt = grab('altKey');
+  const ok = [shift, ctrl, alt].every(value => Number.isFinite(value) && value > 0);
+  return ok ? { shift, ctrl, alt } : DEFAULT_OFFSETS;
 }
 
 function rowsOf(group: CaseGroup): Row[] {
@@ -192,17 +195,33 @@ function composeEntries(rows: Row[], offsets: typeof DEFAULT_OFFSETS): OrigEntry
       entries.push({ ...base, keys: suffix + keyLabel(code) });
     }
   }
-  return entries;
+  const seen = new Set<string>();
+  return entries.filter(entry => {
+    const id = [entry.keys, entry.kind, entry.dir ?? '', entry.steps ?? ''].join('|');
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function findSwitchBody(src: string, before: number): string | null {
+  const re = /switch\s*\(/g;
+  let best = -1;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(src)) !== null) {
+    if (match.index >= before) break;
+    best = match.index;
+  }
+  if (best < 0) return null;
+  const brace = src.indexOf('{', best);
+  if (brace < 0 || brace > before) return null;
+  return blockAt(src, brace);
 }
 
 function parseEngineSource(src: string): OrigEntry[] | null {
   const firstCase = src.search(/case\s*"/);
   if (firstCase < 0) return null;
-  const switchAt = src.lastIndexOf('switch(', firstCase);
-  if (switchAt < 0) return null;
-  const brace = src.indexOf('{', switchAt);
-  if (brace < 0 || brace > firstCase) return null;
-  const body = blockAt(src, brace);
+  const body = findSwitchBody(src, firstCase);
   if (!body) return null;
   const groups = readCases(body);
   if (groups.length === 0) return null;
@@ -217,14 +236,21 @@ function earlyHandlers(): string[] {
   return registry.native.map(item => item.src);
 }
 
-function detectEngine(): OrigEntry[] | null {
+interface EngineScan {
+  entries: OrigEntry[] | null;
+  present: boolean;
+}
+
+function detectEngine(): EngineScan {
+  let present = false;
   for (const fn of [...earlyHandlers(), ...allHandlers()]) {
     const src = String(fn);
     if (!src.includes('linkFollow') && !src.includes('Engine.backward')) continue;
+    present = true;
     const parsed = parseEngineSource(src);
-    if (parsed) return parsed;
+    if (parsed) return { entries: parsed, present: true };
   }
-  return null;
+  return { entries: null, present };
 }
 
 const COMBO_WORDS: Record<string, string> = {
@@ -297,6 +323,10 @@ function detectModLoader(): OrigEntry | null {
     if (!/["']m["']/i.test(src)) continue;
     return { keys: 'Alt + M', kind: 'modloader', detected: true };
   }
+  const gui = (window as any).modLoaderGui;
+  if (gui && typeof gui === 'object') {
+    return { keys: 'Alt + M', kind: 'modloader', detected: true };
+  }
   return null;
 }
 
@@ -304,21 +334,25 @@ export interface DetectionResult {
   entries: OrigEntry[];
   fullyDetected: boolean;
   partiallyDetected: boolean;
+  usedSnapshot: boolean;
 }
 
 export function detect(): DetectionResult {
   const engine = detectEngine();
   const mousetrap = detectMousetrap();
   const loader = detectModLoader();
-  const entries: OrigEntry[] = [
-    ...(engine ?? SNAPSHOT_ENGINE),
-    ...(mousetrap ?? SNAPSHOT_MOUSETRAP),
-    loader ?? SNAPSHOT_LOADER,
-  ];
-  const detectedLayers = [engine, mousetrap, loader].filter(Boolean).length;
+
+  const usedSnapshot = !engine.entries && engine.present;
+  const engineEntries = engine.entries ?? (usedSnapshot ? SNAPSHOT_ENGINE : []);
+  const entries: OrigEntry[] = [...engineEntries, ...(mousetrap ?? []), ...(loader ? [loader] : [])];
+  const nothingDetected = entries.length === 0;
+  if (nothingDetected) entries.push(...SNAPSHOT_ENGINE, ...SNAPSHOT_MOUSETRAP, SNAPSHOT_LOADER);
+
+  const detectedLayers = [engine.entries, mousetrap, loader].filter(Boolean).length;
   return {
     entries,
     fullyDetected: detectedLayers === 3,
     partiallyDetected: detectedLayers > 0,
+    usedSnapshot: usedSnapshot || nothingDetected,
   };
 }

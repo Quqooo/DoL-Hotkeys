@@ -279,8 +279,8 @@ function paintOriginal(): void {
     row.append(left, right);
     originalEl.append(row);
   }
-  if (result.fullyDetected) sourceEl.textContent = s.srcDynamic;
-  else if (result.partiallyDetected) sourceEl.textContent = s.srcMixed;
+  if (result.usedSnapshot) sourceEl.textContent = s.srcMixed;
+  else if (result.partiallyDetected) sourceEl.textContent = s.srcDynamic;
   else sourceEl.textContent = s.srcSnapshot;
 }
 

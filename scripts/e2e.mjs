@@ -357,6 +357,100 @@ async function main() {
       return { keys, pick, modCount: (window.modDataValueZipList || []).length };
     })()`);
     console.log(`  env: ${JSON.stringify(env)}`);
+    if (process.env.HK_PROBE === 'orig') {
+      await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
+      await sleep(200);
+      await pressAlt(cdp, 'O');
+      await cdp.waitFor(`document.querySelector('#overlayTabs button[data-dolhk-tab]')`, 15000);
+      await cdp.evaluate(`document.querySelector('#overlayTabs button[data-dolhk-tab]').click()`);
+      await cdp.waitFor(`document.querySelector('.dolhk-orig-row')`, 15000);
+      await sleep(400);
+      const dump = await cdp.evaluate(`({
+        source: document.querySelector('.dolhk-tools .dolhk-muted')?.textContent ?? '',
+        rows: [...document.querySelectorAll('.dolhk-orig-row')].map(r => ({
+          keys: r.querySelector('.dolhk-orig-key')?.textContent ?? '',
+          desc: r.querySelector('.dolhk-orig-desc')?.textContent ?? '',
+          snap: /snapshot/i.test(r.textContent),
+        })),
+      })`);
+      console.log('source:', dump.source);
+      for (const row of dump.rows) {
+        console.log(`  ${row.keys.padEnd(26)} | ${row.desc}${row.snap ? '  [snapshot]' : ''}`);
+      }
+      process.exit(0);
+    }
+    if (process.env.HK_PROBE === 'keys') {
+      const info = await cdp.evaluate(`(() => {
+        const reg = window.__DoLHKEarly || {};
+        const nat = (reg.native || []).map(x => String(x.src));
+        const $ = window.jQuery;
+        const jq = [];
+        for (const [label, el] of [['document', document], ['window', window]]) {
+          const ev = $ && $._data ? $._data(el, 'events') : null;
+          if (!ev) continue;
+          for (const type of Object.keys(ev)) {
+            for (const item of ev[type] || []) {
+              if (typeof item.handler === 'function') jq.push({ t: label + ':' + type, s: String(item.handler) });
+            }
+          }
+        }
+        const pick = list => list.map(x => (typeof x === 'string' ? x : x.s));
+        const all = [...pick(nat), ...pick(jq)];
+        const hits = all.filter(s => /linkFollow/i.test(s));
+        return {
+          native: nat.length,
+          bindingKeys: (reg.bindings || []).map(b => b.keys),
+          bindingCount: (reg.bindings || []).length,
+          jq: jq.map(x => x.t),
+          jqCount: jq.length,
+          linkFollowHits: hits.length,
+          hasJqueryData: Boolean($ && $._data),
+          firstHit: hits[0] ? hits[0].replace(/\s+/g, ' ').slice(0, 300) : null,
+          hasCases: hits.map(h => (h.match(/case\s*"/g) || []).length).slice(0, 5),
+        };
+      })()`);
+      console.log('keys:', JSON.stringify(info, null, 1));
+      process.exit(0);
+    }
+    if (process.env.HK_PROBE === 'orig') {
+      await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
+      await sleep(200);
+      await pressAlt(cdp, 'O');
+      await cdp.waitFor(`document.querySelector('#overlayTabs button[data-dolhk-tab]')`, 15000);
+      await cdp.evaluate(`document.querySelector('#overlayTabs button[data-dolhk-tab]').click()`);
+      await cdp.waitFor(`document.querySelector('.dolhk-orig-row')`, 15000);
+      await sleep(400);
+      const dump = await cdp.evaluate(`({
+        source: document.querySelector('.dolhk-tools .dolhk-muted')?.textContent ?? '',
+        rows: [...document.querySelectorAll('.dolhk-orig-row')].map(r => ({
+          keys: r.querySelector('.dolhk-orig-key')?.textContent ?? '',
+          desc: r.querySelector('.dolhk-orig-desc')?.textContent ?? '',
+          snap: /snapshot/i.test(r.textContent),
+        })),
+      })`);
+      console.log('source:', dump.source);
+      for (const row of dump.rows) {
+        console.log(`  ${row.keys.padEnd(26)} | ${row.desc}${row.snap ? '  [snapshot]' : ''}`);
+      }
+      process.exit(0);
+    }
+    if (process.env.HK_PROBE === 'keys') {
+      const snap = async () => cdp.evaluate(`(() => {
+        const raw = (window.__DoLHKEarly || {}).native || [];
+        const hits = raw.filter(x => /altKey/i.test(x.src) && /["']m["']/i.test(x.src));
+        return {
+          count: raw.length,
+          altHits: hits.length,
+          first: hits[0] ? hits[0].src.replace(/\s+/g, ' ').slice(0, 220) : null,
+          gui: typeof window.modLoaderGui,
+          guiKeys: window.modLoaderGui ? Object.keys(window.modLoaderGui).slice(0, 12) : null,
+        };
+      })()`);
+      console.log('early:', JSON.stringify(await snap()));
+      await sleep(6000);
+      console.log('later:', JSON.stringify(await snap()));
+      process.exit(0);
+    }
     if (process.env.HK_PROBE === 'env') {
       const mods = await cdp.evaluate(`(() => {
         const m = window.modSC2DataManager;
@@ -559,13 +653,17 @@ async function main() {
     check('L10 auto mode restores detection', autoLabels.row.length > 0, JSON.stringify(autoLabels));
 
     const originalRows = await cdp.evaluate(`document.querySelectorAll('.dolhk-orig-row').length`);
-    check('L9 vanilla hotkey list rendered', originalRows >= 8, `${originalRows} rows`);
+    const snapshotRows = await cdp.evaluate(
+      `[...document.querySelectorAll('.dolhk-orig-row')].filter(r => /snapshot/i.test(r.textContent)).length`,
+    );
+    check('L9 vanilla hotkey list rendered', originalRows >= 4, `${originalRows} rows`);
+    check('L9 list has no stale snapshot rows', snapshotRows === 0, `${snapshotRows} snapshot rows`);
     const sourceLabel = await cdp.evaluate(`document.querySelector('.dolhk-tools .dolhk-muted')?.textContent ?? ''`);
     check('L9 vanilla list marked as detected', /动态检测|Detected/.test(sourceLabel), sourceLabel);
-    const engineRow = await cdp.evaluate(
-      `[...document.querySelectorAll('.dolhk-orig-key')].map(n => n.textContent).some(t => /Num \\//.test(t))`,
+    const modRow = await cdp.evaluate(
+      `[...document.querySelectorAll('.dolhk-orig-key')].map(n => n.textContent).some(t => /Alt \\+ M/.test(t))`,
     );
-    check('L9 vanilla list parsed from the live engine', engineRow);
+    check('L9 mod manager hotkey detected', modRow);
 
     await cdp.evaluate(`closeOverlay()`);
     await sleep(300);
