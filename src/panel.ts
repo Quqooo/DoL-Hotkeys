@@ -1,5 +1,6 @@
 import { cancelCapture, isCapturing, startCapture } from './capture';
 import { detect } from './detect';
+import { confirmDialog } from './dialog';
 import { stateTemp } from './game';
 import { invalidateLang, setLangOverride, t } from './i18n';
 import { formatSequence, isDigitStep, mouseButtonOf, sameSequence, sameStep } from './keys';
@@ -327,13 +328,22 @@ function buildVolume(config: ReturnType<typeof getConfig>): HTMLElement {
   checkbox.checked = config.volumeKeys;
   checkbox.disabled = !supported;
   checkbox.addEventListener('change', () => {
-    if (checkbox.checked && !window.confirm(s.volumeConfirm)) {
-      checkbox.checked = false;
+    const commit = (): void => {
+      config.volumeKeys = checkbox.checked;
+      saveConfig();
+      if (supported) applyVolumeOverride(checkbox.checked);
+    };
+    if (!checkbox.checked) {
+      commit();
       return;
     }
-    config.volumeKeys = checkbox.checked;
-    saveConfig();
-    if (supported) applyVolumeOverride(checkbox.checked);
+    void confirmDialog(s.volumeConfirm, s.confirmOk, s.confirmCancel, s.confirmTitle).then(ok => {
+      if (!ok) {
+        checkbox.checked = false;
+        return;
+      }
+      commit();
+    });
   });
   label.append(checkbox, document.createTextNode(` ${s.volume}`));
   column.append(label, span('dolhk-muted', supported ? s.volumeOn : s.volumeUnsupported));

@@ -451,6 +451,51 @@ async function main() {
       for (const line of picked.slice(0, 40)) console.log(`  ${line}`);
       process.exit(0);
     }
+    if (process.env.HK_PROBE === 'dialog') {
+      await cdp.evaluate(`(() => {
+        if (SugarCube.Dialog.isOpen()) SugarCube.Dialog.close();
+        document.getElementById('ui-dialog')?.classList.remove('closeBlocked');
+        window.cordova = { exec: () => {} };
+        return true;
+      })()`);
+      await sleep(400);
+      await openHotkeysTab(cdp);
+      await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); true`);
+      await sleep(600);
+      const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
+      await writeFile(path.join(OUTPUT_DIR, 'dialog.png'), Buffer.from(shot.data, 'base64'));
+      const state = await cdp.evaluate(`({
+        open: SugarCube.Dialog.isOpen('dolhk-dialog-host'),
+        bodyClass: (SugarCube.Dialog.body ? (SugarCube.Dialog.body() || {}).className : '') || '',
+        zIndexDialog: getComputedStyle(document.getElementById('ui-overlay')).zIndex,
+        zIndexOverlay: getComputedStyle(document.getElementById('customOverlay')).zIndex,
+        buttons: [...document.querySelectorAll('.dolhk-dialog-actions button')].map(node => node.textContent),
+      })`);
+      console.log('dialog:', JSON.stringify(state));
+      process.exit(0);
+    }
+    if (process.env.HK_PROBE === 'api') {
+      const info = await cdp.evaluate(`(() => {
+        const cube = window.SugarCube || {};
+        const dialog = cube.Dialog || window.Dialog;
+        return {
+          windowDialog: typeof window.Dialog,
+          cubeDialog: typeof cube.Dialog,
+          dialogKeys: dialog ? Object.getOwnPropertyNames(dialog).slice(0, 24) : null,
+          methods: dialog
+            ? Object.fromEntries(
+                ['setup', 'body', 'append', 'empty', 'open', 'close', 'isOpen'].map(name => [name, typeof dialog[name]]),
+              )
+            : null,
+          uiAlert: typeof (cube.UI || {}).alert,
+          uiKeys: Object.keys(cube.UI || {}).slice(0, 24),
+          hasModal: Boolean(document.getElementById('ui-dialog')),
+          modalClass: document.getElementById('ui-dialog')?.className ?? '',
+        };
+      })()`);
+      console.log('api:', JSON.stringify(info, null, 1));
+      process.exit(0);
+    }
     if (process.env.HK_PROBE === 'perf') {
       await cdp.send('Performance.enable', {});
       await cdp.evaluate(`(() => {
@@ -977,6 +1022,62 @@ async function main() {
     const sideOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     check('L18 side button triggers its action in game', sideOpened === 'journal', sideOpened);
     await cdp.evaluate(`closeOverlay()`);
+    await sleep(300);
+
+    await cdp.evaluate(`window.cordova = { exec: () => { window.__cordovaCalls = (window.__cordovaCalls || 0) + 1; } }; true`);
+    await cdp.evaluate(`window.__confirmCalled = false; window.confirm = () => { window.__confirmCalled = true; return false; }; true`);
+    await openHotkeysTab(cdp);
+    const volumeToggle = await cdp.evaluate(`(() => {
+      const box = document.querySelector('.dolhk-row input[type="checkbox"]');
+      return box ? { disabled: box.disabled } : null;
+    })()`);
+    check('L20 volume toggle is enabled for the cordova stub', Boolean(volumeToggle) && volumeToggle.disabled === false, JSON.stringify(volumeToggle));
+
+    await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); true`);
+    await sleep(400);
+    const dialogShown = await cdp.evaluate(`({
+      open: Boolean(window.SugarCube && SugarCube.Dialog && SugarCube.Dialog.isOpen('dolhk-dialog-host')),
+      buttons: [...document.querySelectorAll('.dolhk-dialog-actions button')].map(node => node.textContent),
+      confirmCalled: window.__confirmCalled,
+      hostClass: (SugarCube.Dialog.body ? (SugarCube.Dialog.body() || {}).className : '') || '',
+    })`);
+    check(
+      'L20 enabling volume keys opens the native dialog, not window.confirm',
+      dialogShown.open && dialogShown.confirmCalled === false && dialogShown.buttons.length === 2 &&
+        dialogShown.hostClass.includes('dolhk-dialog-host'),
+      JSON.stringify(dialogShown),
+    );
+
+    await cdp.evaluate(`[...document.querySelectorAll('.dolhk-dialog-actions button')][0].click(); true`);
+    await sleep(400);
+    const cancelState = await cdp.evaluate(`({
+      open: Boolean(SugarCube.Dialog && SugarCube.Dialog.isOpen('dolhk-dialog-host')),
+      checked: document.querySelector('.dolhk-row input[type="checkbox"]').checked,
+      stored: JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.volumeKeys ?? null,
+    })`);
+    check(
+      'L20 cancelling the dialog leaves the toggle off',
+      cancelState.open === false && cancelState.checked === false && cancelState.stored === false,
+      JSON.stringify(cancelState),
+    );
+
+    await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); true`);
+    await sleep(400);
+    await cdp.evaluate(`[...document.querySelectorAll('.dolhk-dialog-actions button')][1].click(); true`);
+    await sleep(400);
+    const okState = await cdp.evaluate(`({
+      open: Boolean(SugarCube.Dialog && SugarCube.Dialog.isOpen('dolhk-dialog-host')),
+      checked: document.querySelector('.dolhk-row input[type="checkbox"]').checked,
+      stored: JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.volumeKeys ?? null,
+      execs: window.__cordovaCalls || 0,
+    })`);
+    check(
+      'L20 confirming applies the volume override',
+      okState.open === false && okState.checked === true && okState.stored === true && okState.execs >= 2,
+      JSON.stringify(okState),
+    );
+
+    await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); delete window.cordova; true`);
     await sleep(300);
 
     const hotkeyErrors = cdp.errors.filter(text => /dol-hotkeys|hotkeys\.js|hotkeys-early\.js/.test(text));

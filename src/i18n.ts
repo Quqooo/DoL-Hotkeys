@@ -21,6 +21,9 @@ export interface Dict {
   volumeInvert: string;
   volumeUnsupported: string;
   volumeConfirm: string;
+  confirmTitle: string;
+  confirmOk: string;
+  confirmCancel: string;
   warnDigit: string;
   warnBrowser: string;
   warnSide: string;
@@ -60,6 +63,9 @@ const zh: Dict = {
   volumeInvert: '反转音量键方向',
   volumeUnsupported: '仅安卓客户端可用',
   volumeConfirm: '开启后游戏前台时音量键将不再调节音量，确定继续？',
+  confirmTitle: '提示',
+  confirmOk: '继续',
+  confirmCancel: '取消',
   warnDigit: '含数字键：与原版数字选链接重叠，可能一次触发两件事',
   warnBrowser: '浏览器可能优先处理该组合',
   warnSide: '未加修饰键的鼠标侧键：浏览器可能同时切换页面历史',
@@ -111,6 +117,9 @@ const en: Dict = {
   volumeInvert: 'Invert volume key direction',
   volumeUnsupported: 'Android client only',
   volumeConfirm: 'While the game is focused the volume keys will no longer change volume. Continue?',
+  confirmTitle: 'Confirm',
+  confirmOk: 'Continue',
+  confirmCancel: 'Cancel',
   warnDigit: 'Contains a digit: overlaps vanilla link numbering, may fire two actions at once',
   warnBrowser: 'The browser may handle this combination first',
   warnSide: 'Bare side button: the browser may also navigate its own history',

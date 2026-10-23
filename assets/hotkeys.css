@@ -28,6 +28,16 @@
 	white-space: nowrap;
 }
 
+.dolhk-dialog-text {
+	margin: 0 0 14px;
+}
+
+.dolhk-dialog-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
 .dolhk-row {
 	display: flex;
 	align-items: center;

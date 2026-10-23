@@ -22,6 +22,15 @@ declare global {
     jQuery?: any;
     wikifier?: (widget: string, ...args: unknown[]) => DocumentFragment;
     closeOverlay?: () => void;
+    Dialog?: {
+      setup: (title: string, classNames?: string) => HTMLElement;
+      body: () => HTMLElement;
+      append: (...args: unknown[]) => unknown;
+      empty: () => unknown;
+      open: (options?: { top?: number }, onClose?: (ev?: unknown) => void) => unknown;
+      close: () => unknown;
+      isOpen: (classNames?: string) => boolean;
+    };
     cordova?: any;
     __DoLHKEarly?: EarlyRegistry;
     DoLHK?: {
