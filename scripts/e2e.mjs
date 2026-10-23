@@ -168,6 +168,7 @@ const KEY = {
   C: ['KeyC', 'c', 67],
   F: ['KeyF', 'f', 70],
   H: ['KeyH', 'h', 72],
+  I: ['KeyI', 'i', 73],
   T: ['KeyT', 't', 84],
   J: ['KeyJ', 'j', 74],
   K: ['KeyK', 'k', 75],
@@ -540,12 +541,13 @@ async function main() {
       journal: window.DoLHK.available('journal'),
       characteristics: window.DoLHK.available('characteristics'),
       traits: window.DoLHK.available('traits'),
+      statistics: window.DoLHK.available('statistics'),
       cheats: window.DoLHK.available('cheats'),
     })`);
     check(
       'L13 menu keeps only the always-available pages',
       titleAvailability.options && titleAvailability.saves && titleAvailability.feats &&
-        !titleAvailability.social && !titleAvailability.journal &&
+        !titleAvailability.social && !titleAvailability.journal && !titleAvailability.statistics &&
         !titleAvailability.characteristics && !titleAvailability.traits && !titleAvailability.cheats,
       JSON.stringify(titleAvailability),
     );
@@ -573,10 +575,15 @@ async function main() {
     check('L3 panel renders', panelReady);
 
     const rows = await cdp.evaluate(`[...document.querySelectorAll('.dolhk-row[data-dolhk]')].map(r => r.dataset.dolhk)`);
-    check('L3 ten bindable actions listed', rows.length === 10, rows.join(','));
+    check('L3 eleven bindable actions listed', rows.length === 11, rows.join(','));
     check(
       'L3 new pages are listed',
-      ['traits', 'feats', 'cheats'].every(id => rows.includes(id)),
+      ['traits', 'statistics', 'feats', 'cheats'].every(id => rows.includes(id)),
+      rows.join(','),
+    );
+    check(
+      'L3 statistics sits right before feats',
+      rows.indexOf('statistics') === rows.indexOf('feats') - 1,
       rows.join(','),
     );
 
@@ -666,6 +673,7 @@ async function main() {
 
     check('L15 Alt+T opens traits', (await openOverlayWith('T')) === 'traits');
     check('L15 Alt+F opens feats', (await openOverlayWith('F')) === 'gameFeats');
+    check('L19 Alt+I opens statistics', (await openOverlayWith('I')) === 'statistics');
     await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
     await cdp.evaluate(`SugarCube.State.variables.cheatsEnabled = false; SugarCube.State.variables.debug = 0; true`);
     await pressAlt(cdp, 'H');

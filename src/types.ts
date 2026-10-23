@@ -5,6 +5,7 @@ export type ActionId =
   | 'social'
   | 'traits'
   | 'journal'
+  | 'statistics'
   | 'feats'
   | 'options'
   | 'saves'
@@ -17,6 +18,7 @@ export const ACTION_ORDER: readonly ActionId[] = [
   'social',
   'traits',
   'journal',
+  'statistics',
   'feats',
   'options',
   'saves',
@@ -28,6 +30,7 @@ export const OVERLAY_OF: Record<string, string> = {
   social: 'social',
   traits: 'traits',
   journal: 'journal',
+  statistics: 'statistics',
   options: 'options',
   saves: 'saves',
   cheats: 'cheats',

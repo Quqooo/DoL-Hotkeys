@@ -35,7 +35,9 @@ export function cheatsAvailable(): boolean {
 
 export function isAvailable(id: ActionId): boolean {
   if (id === 'cheats') return cheatsAvailable();
-  if (id === 'characteristics' || id === 'social' || id === 'traits' || id === 'journal') return inGame();
+  if (id === 'characteristics' || id === 'social' || id === 'traits' || id === 'journal' || id === 'statistics') {
+    return inGame();
+  }
   return true;
 }
 

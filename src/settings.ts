@@ -12,6 +12,7 @@ export const DEFAULT_BINDS: Record<ActionId, string[]> = {
   social: ['Alt+KeyR'],
   traits: ['Alt+KeyT'],
   journal: ['Alt+KeyJ'],
+  statistics: ['Alt+KeyI'],
   feats: ['Alt+KeyF'],
   options: ['Alt+KeyO'],
   saves: ['Alt+KeyS'],
