@@ -333,7 +333,7 @@ async function main() {
   const original = await readFile(GAME_HTML, 'utf8');
   const marker = 'window.modDataValueZipList = [';
   if (!original.includes(marker)) throw new Error('Cannot find the mod injection marker in the game HTML');
-  let patched = original.replace(marker, `${marker}"${zip.toString('base64')}",`);
+  let patched = process.env.HK_NO_MOD ? original : original.replace(marker, `${marker}"${zip.toString('base64')}",`);
   for (const extra of EXTRA_ZIPS) {
     const data = await readFile(extra);
     patched = patched.replace(marker, `${marker}"${data.toString('base64')}",`);
@@ -449,6 +449,90 @@ async function main() {
       const picked = cdp.logs.filter(l => /hotkey|Hotkey|HotKeys|validateBoot|modList|initMod|inject|ModLoader =/.test(l));
       console.log(`--- loader logs (${picked.length}/${cdp.logs.length}) ---`);
       for (const line of picked.slice(0, 40)) console.log(`  ${line}`);
+      process.exit(0);
+    }
+    if (process.env.HK_PROBE === 'perf') {
+      await cdp.send('Performance.enable', {});
+      await cdp.evaluate(`(() => {
+        if (SugarCube.State.variables.options) SugarCube.State.variables.options.maxStates = 2;
+        SugarCube.Config.history.maxStates = 2;
+        window.__mut = { calls: 0, records: 0 };
+        const obs = new MutationObserver(list => {
+          window.__mut.calls++;
+          window.__mut.records += list.length;
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        return true;
+      })()`);
+      const passage = await cdp.evaluate(
+        `['PassageFooter', 'PassageHeader', 'StoryCaption'].find(name => SugarCube.Story.has(name)) ?? 'Start'`,
+      );
+      const readMetrics = async () => {
+        const { metrics } = await cdp.send('Performance.getMetrics');
+        const map = {};
+        for (const item of metrics) map[item.name] = item.value;
+        return map;
+      };
+      const workload = async () => {
+        for (let i = 0; i < 30; i++) {
+          await cdp.evaluate(`SugarCube.Engine.play('${passage}')`);
+          await sleep(40);
+        }
+        for (let i = 0; i < 200; i++) {
+          await keyEvent(cdp, 'keyDown', { code: 'KeyQ', key: 'q', vk: 81, modifiers: 1 });
+        }
+      };
+      await workload();
+      await cdp.evaluate('window.__mut = { calls: 0, records: 0 }; true');
+      const before = await readMetrics();
+      const startedAt = Date.now();
+      await workload();
+      const elapsed = Date.now() - startedAt;
+      const after = await readMetrics();
+      const delta = name => +(after[name] - before[name]).toFixed(4);
+      console.log('--- perf ---');
+      console.log(`  mod ${process.env.HK_NO_MOD ? 'off' : 'on'}: 30 passages + 200 keydowns in ${elapsed} ms`);
+      console.log(`  boot script ${before.ScriptDuration.toFixed(4)} s | boot task ${before.TaskDuration.toFixed(4)} s`);
+      console.log(`  ScriptDuration ${delta('ScriptDuration')} s | Task ${delta('TaskDuration')} s | Layout ${delta('LayoutDuration')} s | Style ${delta('RecalcStyleDuration')} s`);
+      console.log(`  body mutations ${JSON.stringify(await cdp.evaluate('window.__mut'))}`);
+      const keyMicro = await cdp.evaluate(`(() => {
+        const ev = new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ', altKey: true, bubbles: true });
+        const t0 = performance.now();
+        for (let i = 0; i < 2000; i++) document.dispatchEvent(ev);
+        return +(((performance.now() - t0) / 2000) * 1000).toFixed(2);
+      })()`);
+      console.log(`  keydown dispatch ${keyMicro} us/event (game + listeners)`);
+      if (!process.env.HK_NO_MOD) {
+        const idle = await cdp.evaluate(`(() => {
+          const t0 = performance.now();
+          for (let i = 0; i < 5000; i++) window.DoLHK.refreshTab();
+          return +(((performance.now() - t0) / 5000) * 1000).toFixed(2);
+        })()`);
+        console.log(`  ensureTab (no overlay) ${idle} us/call`);
+        await openHotkeysTab(cdp);
+        const detectCost = await cdp.evaluate(`(() => {
+          const btn = [...document.querySelectorAll('.dolhk-btn')].pop();
+          if (!btn) return null;
+          let t0 = performance.now();
+          btn.click();
+          const first = performance.now() - t0;
+          t0 = performance.now();
+          btn.click();
+          const second = performance.now() - t0;
+          return {
+            first: +first.toFixed(1),
+            second: +second.toFixed(1),
+            rows: document.querySelectorAll('.dolhk-orig-row').length,
+          };
+        })()`);
+        console.log(`  detect + render ${JSON.stringify(detectCost)} ms`);
+        const busy = await cdp.evaluate(`(() => {
+          const t0 = performance.now();
+          for (let i = 0; i < 2000; i++) window.DoLHK.refreshTab();
+          return +(((performance.now() - t0) / 2000) * 1000).toFixed(2);
+        })()`);
+        console.log(`  ensureTab (overlay open) ${busy} us/call`);
+      }
       process.exit(0);
     }
     if (!ready) {
