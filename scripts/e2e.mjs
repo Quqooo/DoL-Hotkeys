@@ -1024,7 +1024,9 @@ async function main() {
     await cdp.evaluate(`closeOverlay()`);
     await sleep(300);
 
-    await cdp.evaluate(`window.cordova = { exec: () => { window.__cordovaCalls = (window.__cordovaCalls || 0) + 1; } }; true`);
+    await cdp.evaluate(`window.cordova = { exec: (ok, fail, service, action, args) => {
+      (window.__cordovaLog = window.__cordovaLog || []).push({ service, action, args });
+    } }; true`);
     await cdp.evaluate(`window.__confirmCalled = false; window.confirm = () => { window.__confirmCalled = true; return false; }; true`);
     await openHotkeysTab(cdp);
 
@@ -1082,14 +1084,25 @@ async function main() {
     await cdp.evaluate(`[...document.querySelectorAll('.dolhk-dialog-actions button')][1].click(); true`);
     await sleep(400);
     const enabledState = await radioState();
-    const execsAfterEnable = await cdp.evaluate('window.__cordovaCalls || 0');
+    const enableLog = await cdp.evaluate(`(window.__cordovaLog || []).map(c => ({
+      action: c.action,
+      button: Array.isArray(c.args) ? c.args[0] : null,
+      on: Array.isArray(c.args) ? c.args[1] : null,
+    }))`);
+    const overridesOn = enableLog.filter(c => c.action === 'overrideButton' && c.on === true);
     check(
       'L20 confirming applies the volume override',
       enabledState.checked.join(',') === 'on' &&
         enabledState.volumeKeys === true &&
         enabledState.volumeInvert === false &&
-        execsAfterEnable >= 2,
-      JSON.stringify({ ...enabledState, execs: execsAfterEnable }),
+        overridesOn.length >= 2,
+      JSON.stringify({ ...enabledState, log: enableLog.slice(-4) }),
+    );
+    check(
+      'L20 override uses the CoreAndroid overrideButton action for both buttons',
+      new Set(overridesOn.map(c => c.button)).size === 2 &&
+        enableLog.every(c => c.action === 'overrideButton' || c.action === undefined),
+      JSON.stringify(enableLog.slice(0, 4)),
     );
 
     await pickVolume('invert');
@@ -1108,10 +1121,18 @@ async function main() {
 
     await pickVolume('off');
     const offState = await radioState();
+    const releaseLog = await cdp.evaluate(`(window.__cordovaLog || []).slice(-2).map(c => ({
+      action: c.action,
+      button: Array.isArray(c.args) ? c.args[0] : null,
+      on: Array.isArray(c.args) ? c.args[1] : null,
+    }))`);
     check(
       'L20 choosing disabled releases the override',
-      offState.checked.join(',') === 'off' && offState.volumeKeys === false,
-      JSON.stringify(offState),
+      offState.checked.join(',') === 'off' &&
+        offState.volumeKeys === false &&
+        releaseLog.length === 2 &&
+        releaseLog.every(c => c.action === 'overrideButton' && c.on === false),
+      JSON.stringify({ ...offState, log: releaseLog }),
     );
 
     await cdp.evaluate(`delete window.cordova; true`);

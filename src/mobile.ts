@@ -10,8 +10,8 @@ export function applyVolumeOverride(enabled: boolean): boolean {
   if (!hasCordova()) return false;
   try {
     const cordova = window.cordova;
-    cordova.exec(null, null, 'CoreAndroid', 'overrideVolumeButtonBehavior', ['volumeup', enabled]);
-    cordova.exec(null, null, 'CoreAndroid', 'overrideVolumeButtonBehavior', ['volumedown', enabled]);
+    cordova.exec(null, null, 'CoreAndroid', 'overrideButton', ['volumeup', enabled]);
+    cordova.exec(null, null, 'CoreAndroid', 'overrideButton', ['volumedown', enabled]);
     return true;
   } catch (error) {
     console.warn('[dol-hotkeys] volume override failed:', error);

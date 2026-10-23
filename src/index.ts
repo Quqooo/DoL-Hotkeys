@@ -17,8 +17,10 @@ function init(): boolean {
   setLangOverride(config.lang);
   if (!listenersInstalled) {
     install();
+    // Registering a volume listener makes cordova override the keys by itself,
+    // so the stored setting has to be re-applied right after, even when off.
     installVolumeKeys();
-    if (config.volumeKeys) applyVolumeOverride(true);
+    applyVolumeOverride(config.volumeKeys);
     listenersInstalled = true;
   }
   if (!overlayHost()) return false;
