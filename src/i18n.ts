@@ -18,6 +18,8 @@ export interface Dict {
   langEn: string;
   volume: string;
   volumeOn: string;
+  volumeOff: string;
+  volumeEnabled: string;
   volumeInvert: string;
   volumeUnsupported: string;
   volumeConfirm: string;
@@ -60,7 +62,9 @@ const zh: Dict = {
   langEn: 'English',
   volume: '音量键回溯/前进',
   volumeOn: '音量 + 回溯，音量 − 前进',
-  volumeInvert: '反转音量键方向',
+  volumeOff: '禁用',
+  volumeEnabled: '启用',
+  volumeInvert: '反向',
   volumeUnsupported: '仅安卓客户端可用',
   volumeConfirm: '开启后游戏前台时音量键将不再调节音量，确定继续？',
   confirmTitle: '提示',
@@ -114,7 +118,9 @@ const en: Dict = {
   langEn: 'English',
   volume: 'Volume keys (back/forward)',
   volumeOn: 'Volume + back, Volume - forward',
-  volumeInvert: 'Invert volume key direction',
+  volumeOff: 'Disabled',
+  volumeEnabled: 'Enabled',
+  volumeInvert: 'Inverted',
   volumeUnsupported: 'Android client only',
   volumeConfirm: 'While the game is focused the volume keys will no longer change volume. Continue?',
   confirmTitle: 'Confirm',

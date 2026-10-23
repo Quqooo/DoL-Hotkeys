@@ -317,50 +317,75 @@ function buildLanguage(config: ReturnType<typeof getConfig>): HTMLElement {
   return item;
 }
 
+type VolumeMode = 'off' | 'on' | 'invert';
+
+function volumeModeOf(config: ReturnType<typeof getConfig>): VolumeMode {
+  if (!config.volumeKeys) return 'off';
+  return config.volumeInvert ? 'invert' : 'on';
+}
+
 function buildVolume(config: ReturnType<typeof getConfig>): HTMLElement {
   const s = t();
   const supported = hasCordova();
   const item = div('settingsToggleItem dolhk-row');
   const column = div('dolhk-col');
-  const label = document.createElement('label');
-  const checkbox = document.createElement('input');
-  checkbox.type = 'checkbox';
-  checkbox.checked = config.volumeKeys;
-  checkbox.disabled = !supported;
-  checkbox.addEventListener('change', () => {
-    const commit = (): void => {
-      config.volumeKeys = checkbox.checked;
-      saveConfig();
-      if (supported) applyVolumeOverride(checkbox.checked);
-    };
-    if (!checkbox.checked) {
-      commit();
+
+  const head = div('dolhk-volume-head');
+  head.append(span('gold', s.volume), span('dolhk-muted', supported ? s.volumeOn : s.volumeUnsupported));
+
+  const group = div('dolhk-radios');
+  const inputs: HTMLInputElement[] = [];
+
+  const sync = (): void => {
+    const mode = volumeModeOf(config);
+    for (const input of inputs) input.checked = input.value === mode;
+  };
+
+  const commit = (mode: VolumeMode): void => {
+    config.volumeKeys = mode !== 'off';
+    config.volumeInvert = mode === 'invert';
+    saveConfig();
+    if (supported) applyVolumeOverride(config.volumeKeys);
+  };
+
+  const choose = (mode: VolumeMode): void => {
+    if (mode !== 'off' && !config.volumeKeys) {
+      void confirmDialog(s.volumeConfirm, s.confirmOk, s.confirmCancel, s.confirmTitle).then(ok => {
+        if (!ok) {
+          sync();
+          return;
+        }
+        commit(mode);
+      });
       return;
     }
-    void confirmDialog(s.volumeConfirm, s.confirmOk, s.confirmCancel, s.confirmTitle).then(ok => {
-      if (!ok) {
-        checkbox.checked = false;
-        return;
-      }
-      commit();
+    commit(mode);
+  };
+
+  const options: Array<[VolumeMode, string]> = [
+    ['off', s.volumeOff],
+    ['on', s.volumeEnabled],
+    ['invert', s.volumeInvert],
+  ];
+  for (const [mode, label] of options) {
+    if (inputs.length > 0) group.append(document.createTextNode(' | '));
+    const wrap = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'dolhk-volume';
+    input.value = mode;
+    input.disabled = !supported;
+    input.addEventListener('change', () => {
+      if (input.checked) choose(mode);
     });
-  });
-  label.append(checkbox, document.createTextNode(` ${s.volume}`));
-  column.append(label, span('dolhk-muted', supported ? s.volumeOn : s.volumeUnsupported));
+    inputs.push(input);
+    wrap.append(input, document.createTextNode(` ${label}`));
+    group.append(wrap);
+  }
+  sync();
 
-  const invertLabel = document.createElement('label');
-  invertLabel.className = 'dolhk-invert';
-  const invert = document.createElement('input');
-  invert.type = 'checkbox';
-  invert.checked = config.volumeInvert;
-  invert.disabled = !supported;
-  invert.addEventListener('change', () => {
-    config.volumeInvert = invert.checked;
-    saveConfig();
-  });
-  invertLabel.append(invert, document.createTextNode(` ${s.volumeInvert}`));
-
-  item.append(column, invertLabel);
+  column.append(head, group);
+  item.append(column);
   return item;
 }
 

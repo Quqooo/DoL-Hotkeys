@@ -1027,14 +1027,35 @@ async function main() {
     await cdp.evaluate(`window.cordova = { exec: () => { window.__cordovaCalls = (window.__cordovaCalls || 0) + 1; } }; true`);
     await cdp.evaluate(`window.__confirmCalled = false; window.confirm = () => { window.__confirmCalled = true; return false; }; true`);
     await openHotkeysTab(cdp);
-    const volumeToggle = await cdp.evaluate(`(() => {
-      const box = document.querySelector('.dolhk-row input[type="checkbox"]');
-      return box ? { disabled: box.disabled } : null;
-    })()`);
-    check('L20 volume toggle is enabled for the cordova stub', Boolean(volumeToggle) && volumeToggle.disabled === false, JSON.stringify(volumeToggle));
 
-    await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); true`);
-    await sleep(400);
+    const radioState = () =>
+      cdp.evaluate(`(() => {
+        const inputs = [...document.querySelectorAll('.dolhk-radios input[type="radio"]')];
+        const config = JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}');
+        return {
+          values: inputs.map(node => node.value),
+          disabled: inputs.some(node => node.disabled),
+          checked: inputs.filter(node => node.checked).map(node => node.value),
+          volumeKeys: config.volumeKeys ?? null,
+          volumeInvert: config.volumeInvert ?? null,
+        };
+      })()`);
+
+    const initialRadios = await radioState();
+    check(
+      'L20 volume row renders three native radios',
+      initialRadios.values.join(',') === 'off,on,invert' &&
+        initialRadios.disabled === false &&
+        initialRadios.checked.join(',') === 'off',
+      JSON.stringify(initialRadios),
+    );
+
+    const pickVolume = async value => {
+      await cdp.evaluate(`document.querySelector('.dolhk-radios input[value="${value}"]').click(); true`);
+      await sleep(400);
+    };
+
+    await pickVolume('on');
     const dialogShown = await cdp.evaluate(`({
       open: Boolean(window.SugarCube && SugarCube.Dialog && SugarCube.Dialog.isOpen('dolhk-dialog-host')),
       buttons: [...document.querySelectorAll('.dolhk-dialog-actions button')].map(node => node.textContent),
@@ -1050,35 +1071,51 @@ async function main() {
 
     await cdp.evaluate(`[...document.querySelectorAll('.dolhk-dialog-actions button')][0].click(); true`);
     await sleep(400);
-    const cancelState = await cdp.evaluate(`({
-      open: Boolean(SugarCube.Dialog && SugarCube.Dialog.isOpen('dolhk-dialog-host')),
-      checked: document.querySelector('.dolhk-row input[type="checkbox"]').checked,
-      stored: JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.volumeKeys ?? null,
-    })`);
+    const cancelState = await radioState();
     check(
-      'L20 cancelling the dialog leaves the toggle off',
-      cancelState.open === false && cancelState.checked === false && cancelState.stored === false,
+      'L20 cancelling the dialog keeps the volume keys off',
+      cancelState.checked.join(',') === 'off' && cancelState.volumeKeys === false,
       JSON.stringify(cancelState),
     );
 
-    await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); true`);
-    await sleep(400);
+    await pickVolume('on');
     await cdp.evaluate(`[...document.querySelectorAll('.dolhk-dialog-actions button')][1].click(); true`);
     await sleep(400);
-    const okState = await cdp.evaluate(`({
-      open: Boolean(SugarCube.Dialog && SugarCube.Dialog.isOpen('dolhk-dialog-host')),
-      checked: document.querySelector('.dolhk-row input[type="checkbox"]').checked,
-      stored: JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.volumeKeys ?? null,
-      execs: window.__cordovaCalls || 0,
-    })`);
+    const enabledState = await radioState();
+    const execsAfterEnable = await cdp.evaluate('window.__cordovaCalls || 0');
     check(
       'L20 confirming applies the volume override',
-      okState.open === false && okState.checked === true && okState.stored === true && okState.execs >= 2,
-      JSON.stringify(okState),
+      enabledState.checked.join(',') === 'on' &&
+        enabledState.volumeKeys === true &&
+        enabledState.volumeInvert === false &&
+        execsAfterEnable >= 2,
+      JSON.stringify({ ...enabledState, execs: execsAfterEnable }),
     );
 
-    await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); delete window.cordova; true`);
-    await sleep(300);
+    await pickVolume('invert');
+    const invertState = await radioState();
+    const dialogAfterInvert = await cdp.evaluate(
+      `Boolean(SugarCube.Dialog && SugarCube.Dialog.isOpen('dolhk-dialog-host'))`,
+    );
+    check(
+      'L20 switching to inverted needs no second dialog',
+      invertState.checked.join(',') === 'invert' &&
+        invertState.volumeKeys === true &&
+        invertState.volumeInvert === true &&
+        dialogAfterInvert === false,
+      JSON.stringify({ ...invertState, dialog: dialogAfterInvert }),
+    );
+
+    await pickVolume('off');
+    const offState = await radioState();
+    check(
+      'L20 choosing disabled releases the override',
+      offState.checked.join(',') === 'off' && offState.volumeKeys === false,
+      JSON.stringify(offState),
+    );
+
+    await cdp.evaluate(`delete window.cordova; true`);
+    await sleep(200);
 
     const hotkeyErrors = cdp.errors.filter(text => /dol-hotkeys|hotkeys\.js|hotkeys-early\.js/.test(text));
     check('L2 no mod related console errors', hotkeyErrors.length === 0, hotkeyErrors.slice(0, 3).join(' | '));
