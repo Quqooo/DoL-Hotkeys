@@ -23,6 +23,7 @@ export interface Dict {
   volumeConfirm: string;
   warnDigit: string;
   warnBrowser: string;
+  warnSide: string;
   warnDup: (name: string) => string;
   warnModLoader: string;
   names: Record<ActionId, string>;
@@ -61,6 +62,7 @@ const zh: Dict = {
   volumeConfirm: '开启后游戏前台时音量键将不再调节音量，确定继续？',
   warnDigit: '含数字键：与原版数字选链接重叠，可能一次触发两件事',
   warnBrowser: '浏览器可能优先处理该组合',
+  warnSide: '未加修饰键的鼠标侧键：浏览器可能同时切换页面历史',
   warnDup: name => `已被「${name}」使用，实际执行列表中靠前者`,
   warnModLoader: '与模组管理器的 Alt + M 冲突',
   names: {
@@ -110,6 +112,7 @@ const en: Dict = {
   volumeConfirm: 'While the game is focused the volume keys will no longer change volume. Continue?',
   warnDigit: 'Contains a digit: overlaps vanilla link numbering, may fire two actions at once',
   warnBrowser: 'The browser may handle this combination first',
+  warnSide: 'Bare side button: the browser may also navigate its own history',
   warnDup: name => `Already used by "${name}"; the earlier entry wins`,
   warnModLoader: 'Conflicts with the mod manager\'s Alt + M',
   names: {

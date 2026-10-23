@@ -1,15 +1,17 @@
 import { runAction } from './actions';
 import { gameVariables } from './game';
-import { captureKeyDown, captureKeyUp, isCapturing } from './capture';
+import { captureKeyDown, captureKeyUp, captureMouseDown, captureMouseUp, isCapturing } from './capture';
 import {
   appendKey,
   isModifierCode,
   modsFromEvent,
+  mouseStepEvent,
   sameMods,
   sameStep,
   splitStep,
   stepFromEvent,
   stepIsPrefixOf,
+  type StepEvent,
 } from './keys';
 import { getConfig } from './settings';
 import { ACTION_ORDER, type ActionId } from './types';
@@ -20,6 +22,7 @@ const NON_TEXT_INPUTS = new Set(['radio', 'button', 'checkbox', 'submit', 'reset
 let pending: string[] = [];
 let pendingAt = 0;
 let held = new Set<string>();
+const claimed = new Set<number>();
 
 function shouldIgnore(): boolean {
   const variables = gameVariables();
@@ -62,10 +65,51 @@ function extend(sequence: string[], code: string): string[] {
   return out;
 }
 
-function canExtend(e: KeyboardEvent): boolean {
+function canExtend(input: StepEvent): boolean {
   if (held.size === 0 || pending.length === 0) return false;
   const { mods } = splitStep(pending[pending.length - 1]);
-  return sameMods(mods, modsFromEvent(e));
+  return sameMods(mods, modsFromEvent(input));
+}
+
+function handlePress(input: StepEvent, event: Event): boolean {
+  if (pending.length > 0 && Date.now() - pendingAt > STEP_TIMEOUT) pending = [];
+
+  const merging = canExtend(input);
+  held.add(input.code);
+
+  if (merging) {
+    const merged = extend(pending, input.code);
+    const mergedAction = matchExact(merged);
+    if (mergedAction) {
+      pending = [];
+      event.preventDefault();
+      runAction(mergedAction);
+      return true;
+    }
+    if (matchesPrefix(merged)) {
+      pending = merged;
+      pendingAt = Date.now();
+      event.preventDefault();
+      return true;
+    }
+  }
+
+  const sequence = [...pending, stepFromEvent(input)];
+  const action = matchExact(sequence);
+  if (action) {
+    pending = [];
+    event.preventDefault();
+    runAction(action);
+    return true;
+  }
+  if (matchesPrefix(sequence)) {
+    pending = sequence;
+    pendingAt = Date.now();
+    event.preventDefault();
+    return true;
+  }
+  pending = [];
+  return false;
 }
 
 function onKeyDown(e: KeyboardEvent): void {
@@ -79,43 +123,7 @@ function onKeyDown(e: KeyboardEvent): void {
     pending = [];
     return;
   }
-  if (pending.length > 0 && Date.now() - pendingAt > STEP_TIMEOUT) pending = [];
-
-  const merging = canExtend(e);
-  held.add(e.code);
-
-  if (merging) {
-    const merged = extend(pending, e.code);
-    const mergedAction = matchExact(merged);
-    if (mergedAction) {
-      pending = [];
-      e.preventDefault();
-      runAction(mergedAction);
-      return;
-    }
-    if (matchesPrefix(merged)) {
-      pending = merged;
-      pendingAt = Date.now();
-      e.preventDefault();
-      return;
-    }
-  }
-
-  const sequence = [...pending, stepFromEvent(e)];
-  const action = matchExact(sequence);
-  if (action) {
-    pending = [];
-    e.preventDefault();
-    runAction(action);
-    return;
-  }
-  if (matchesPrefix(sequence)) {
-    pending = sequence;
-    pendingAt = Date.now();
-    e.preventDefault();
-    return;
-  }
-  pending = [];
+  handlePress(e, e);
 }
 
 function onKeyUp(e: KeyboardEvent): void {
@@ -123,14 +131,52 @@ function onKeyUp(e: KeyboardEvent): void {
   if (!isModifierCode(e.code)) held.delete(e.code);
 }
 
+function onMouseDown(e: MouseEvent): void {
+  const input = mouseStepEvent(e);
+  if (!input) return;
+  if (isCapturing()) {
+    if (captureMouseDown(e)) {
+      e.preventDefault();
+      claimed.add(e.button);
+    }
+    return;
+  }
+  if (shouldIgnore()) {
+    pending = [];
+    return;
+  }
+  if (handlePress(input, e)) {
+    e.preventDefault();
+    claimed.add(e.button);
+  }
+}
+
+function onMouseUp(e: MouseEvent): void {
+  const input = mouseStepEvent(e);
+  if (!input) return;
+  if (claimed.has(e.button)) e.preventDefault();
+  if (isCapturing()) captureMouseUp(e);
+  held.delete(input.code);
+}
+
+function onAuxClick(e: MouseEvent): void {
+  if (!claimed.delete(e.button)) return;
+  e.preventDefault();
+  e.stopPropagation();
+}
+
 function resetPending(): void {
   pending = [];
   held.clear();
+  claimed.clear();
 }
 
 export function install(): void {
   document.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('keyup', onKeyUp, true);
+  document.addEventListener('mousedown', onMouseDown, true);
+  document.addEventListener('mouseup', onMouseUp, true);
+  document.addEventListener('auxclick', onAuxClick, true);
   window.addEventListener('blur', resetPending);
   document.addEventListener('visibilitychange', resetPending);
 }

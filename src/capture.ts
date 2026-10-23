@@ -1,4 +1,13 @@
-import { appendKey, isModifierCode, modsFromEvent, sameMods, splitStep, stepFromEvent } from './keys';
+import {
+  appendKey,
+  isModifierCode,
+  modsFromEvent,
+  mouseStepEvent,
+  sameMods,
+  splitStep,
+  stepFromEvent,
+  type StepEvent,
+} from './keys';
 import { MAX_SEQUENCE_STEPS } from './settings';
 
 const MAX_CHORD_KEYS = 8;
@@ -25,12 +34,12 @@ export function startCapture(update: UpdateFn, finish: FinishFn): void {
   update([]);
 }
 
-export function captureKeyDown(e: KeyboardEvent): boolean {
+function press(input: StepEvent, repeat: boolean): boolean {
   if (!active) return false;
-  if (isModifierCode(e.code)) return true;
-  if (e.repeat) return true;
+  if (isModifierCode(input.code)) return true;
+  if (repeat) return true;
 
-  if (e.code === 'Escape') {
+  if (input.code === 'Escape') {
     const { finish } = active;
     active = null;
     held.clear();
@@ -38,7 +47,8 @@ export function captureKeyDown(e: KeyboardEvent): boolean {
     return true;
   }
 
-  const plainBackspace = e.code === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey;
+  const plainBackspace =
+    input.code === 'Backspace' && !input.ctrlKey && !input.altKey && !input.shiftKey && !input.metaKey;
   if (plainBackspace && active.steps.length === 0) {
     const { finish } = active;
     active = null;
@@ -51,9 +61,9 @@ export function captureKeyDown(e: KeyboardEvent): boolean {
   if (lastIndex >= 0 && held.size > 0) {
     const last = active.steps[lastIndex];
     const { mods, codes } = splitStep(last);
-    if (sameMods(mods, modsFromEvent(e)) && codes.length < MAX_CHORD_KEYS) {
-      active.steps[lastIndex] = appendKey(last, e.code);
-      held.add(e.code);
+    if (sameMods(mods, modsFromEvent(input)) && codes.length < MAX_CHORD_KEYS) {
+      active.steps[lastIndex] = appendKey(last, input.code);
+      held.add(input.code);
       active.update(active.steps.slice());
       return true;
     }
@@ -61,16 +71,16 @@ export function captureKeyDown(e: KeyboardEvent): boolean {
 
   if (active.steps.length >= MAX_SEQUENCE_STEPS) return true;
 
-  active.steps.push(stepFromEvent(e));
-  held.add(e.code);
+  active.steps.push(stepFromEvent(input));
+  held.add(input.code);
   active.update(active.steps.slice());
   return true;
 }
 
-export function captureKeyUp(e: KeyboardEvent): boolean {
+function release(code: string, modifierHeld: boolean): boolean {
   if (!active) return false;
-  if (!isModifierCode(e.code)) held.delete(e.code);
-  if (e.altKey || e.ctrlKey || e.shiftKey || e.metaKey) return true;
+  if (!isModifierCode(code)) held.delete(code);
+  if (modifierHeld) return true;
   if (held.size > 0) return true;
   if (active.steps.length === 0) return true;
   const { steps, finish } = active;
@@ -78,6 +88,25 @@ export function captureKeyUp(e: KeyboardEvent): boolean {
   held.clear();
   finish(steps);
   return true;
+}
+
+export function captureKeyDown(e: KeyboardEvent): boolean {
+  return press(e, e.repeat);
+}
+
+export function captureKeyUp(e: KeyboardEvent): boolean {
+  return release(e.code, e.altKey || e.ctrlKey || e.shiftKey || e.metaKey);
+}
+
+export function captureMouseDown(e: MouseEvent): boolean {
+  const input = mouseStepEvent(e);
+  return input ? press(input, false) : false;
+}
+
+export function captureMouseUp(e: MouseEvent): boolean {
+  const input = mouseStepEvent(e);
+  if (!input) return false;
+  return release(input.code, input.altKey || input.ctrlKey || input.shiftKey || input.metaKey);
 }
 
 export function cancelCapture(): void {

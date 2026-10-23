@@ -1,4 +1,7 @@
 const MODIFIER_CODES = /^(Shift|Control|Alt|Meta)(Left|Right)$/;
+const MOUSE_CODE = /^Mouse(\d+)$/;
+
+const MOUSE_BUTTONS = new Set([1, 3, 4]);
 
 const LABELS: Record<string, string> = {
   Backquote: '`',
@@ -39,25 +42,54 @@ const LABELS: Record<string, string> = {
   NumpadDecimal: 'Num .',
   NumpadEnter: 'Num Enter',
   NumpadEqual: 'Num =',
+  Mouse1: 'Middle',
+  Mouse3: 'Back',
+  Mouse4: 'Forward',
 };
 
 const MOD_ORDER = ['Ctrl', 'Shift', 'Alt', 'Meta'] as const;
+
+export interface StepEvent {
+  code: string;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+  metaKey: boolean;
+}
 
 export function isModifierCode(code: string): boolean {
   return MODIFIER_CODES.test(code);
 }
 
-export function stepFromEvent(e: KeyboardEvent): string {
+export function mouseStepEvent(event: MouseEvent): StepEvent | null {
+  if (!MOUSE_BUTTONS.has(event.button)) return null;
+  return {
+    code: `Mouse${event.button}`,
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+  };
+}
+
+export function mouseButtonOf(step: string): number | null {
+  const { mods, codes } = splitStep(step);
+  if (mods.length > 0 || codes.length !== 1) return null;
+  const match = MOUSE_CODE.exec(codes[0]);
+  return match ? Number(match[1]) : null;
+}
+
+export function stepFromEvent(e: StepEvent): string {
   const mods: string[] = [];
   if (e.ctrlKey) mods.push('Ctrl');
   if (e.shiftKey) mods.push('Shift');
   if (e.altKey) mods.push('Alt');
   if (e.metaKey) mods.push('Meta');
-  mods.push(e.code || e.key);
+  mods.push(e.code);
   return mods.join('+');
 }
 
-export function modsFromEvent(e: KeyboardEvent): string[] {
+export function modsFromEvent(e: StepEvent): string[] {
   const mods: string[] = [];
   if (e.ctrlKey) mods.push('Ctrl');
   if (e.shiftKey) mods.push('Shift');

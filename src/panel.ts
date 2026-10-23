@@ -2,7 +2,7 @@ import { cancelCapture, isCapturing, startCapture } from './capture';
 import { detect } from './detect';
 import { stateTemp } from './game';
 import { invalidateLang, setLangOverride, t } from './i18n';
-import { formatSequence, isDigitStep, sameSequence, sameStep } from './keys';
+import { formatSequence, isDigitStep, mouseButtonOf, sameSequence, sameStep } from './keys';
 import { applyVolumeOverride, hasCordova } from './mobile';
 import { getConfig, resetBind, saveConfig, setBind } from './settings';
 import { ACTION_ORDER, type ActionId, type LangMode, type OrigEntry } from './types';
@@ -189,6 +189,10 @@ function paintWarnings(action: ActionId): void {
   if (duplicate) messages.push(s.warnDup(s.names[duplicate]));
   if (steps.some(isDigitStep)) messages.push(s.warnDigit);
   if (steps.some(step => BROWSER_RESERVED.some(reserved => sameStep(reserved, step)))) messages.push(s.warnBrowser);
+  if (steps.some(step => {
+    const button = mouseButtonOf(step);
+    return button === 3 || button === 4;
+  })) messages.push(s.warnSide);
   if (steps.some(step => sameStep('Alt+KeyM', step))) messages.push(s.warnModLoader);
   slot.textContent = messages.join(' · ');
 }

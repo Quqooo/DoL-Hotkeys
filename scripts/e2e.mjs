@@ -188,6 +188,27 @@ async function pressCtrl(cdp, letter) {
   await combo(cdp, ['Ctrl'], code, key, vk);
 }
 
+const MOUSE_BIT = { left: 1, right: 2, middle: 4, back: 8, forward: 16 };
+
+async function centerOf(cdp, selector) {
+  return cdp.evaluate(`(() => {
+    const node = document.querySelector(${JSON.stringify(selector)});
+    if (!node) return null;
+    const rect = node.getBoundingClientRect();
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+  })()`);
+}
+
+async function mouseClick(cdp, button, point, modifiers = 0) {
+  const buttons = MOUSE_BIT[button];
+  const base = { x: point.x, y: point.y, modifiers };
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseMoved', button: 'none', buttons: 0 });
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed', button, buttons, clickCount: 1 });
+  await sleep(70);
+  await cdp.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased', button, buttons: 0, clickCount: 1 });
+  await sleep(160);
+}
+
 function startServer(html, port) {
   const server = createServer(async (req, res) => {
     const url = decodeURIComponent((req.url ?? '/').split('?')[0]);
@@ -410,45 +431,6 @@ async function main() {
         };
       })()`);
       console.log('keys:', JSON.stringify(info, null, 1));
-      process.exit(0);
-    }
-    if (process.env.HK_PROBE === 'orig') {
-      await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
-      await sleep(200);
-      await pressAlt(cdp, 'O');
-      await cdp.waitFor(`document.querySelector('#overlayTabs button[data-dolhk-tab]')`, 15000);
-      await cdp.evaluate(`document.querySelector('#overlayTabs button[data-dolhk-tab]').click()`);
-      await cdp.waitFor(`document.querySelector('.dolhk-orig-row')`, 15000);
-      await sleep(400);
-      const dump = await cdp.evaluate(`({
-        source: document.querySelector('.dolhk-tools .dolhk-muted')?.textContent ?? '',
-        rows: [...document.querySelectorAll('.dolhk-orig-row')].map(r => ({
-          keys: r.querySelector('.dolhk-orig-key')?.textContent ?? '',
-          desc: r.querySelector('.dolhk-orig-desc')?.textContent ?? '',
-          snap: /snapshot/i.test(r.textContent),
-        })),
-      })`);
-      console.log('source:', dump.source);
-      for (const row of dump.rows) {
-        console.log(`  ${row.keys.padEnd(26)} | ${row.desc}${row.snap ? '  [snapshot]' : ''}`);
-      }
-      process.exit(0);
-    }
-    if (process.env.HK_PROBE === 'keys') {
-      const snap = async () => cdp.evaluate(`(() => {
-        const raw = (window.__DoLHKEarly || {}).native || [];
-        const hits = raw.filter(x => /altKey/i.test(x.src) && /["']m["']/i.test(x.src));
-        return {
-          count: raw.length,
-          altHits: hits.length,
-          first: hits[0] ? hits[0].src.replace(/\s+/g, ' ').slice(0, 220) : null,
-          gui: typeof window.modLoaderGui,
-          guiKeys: window.modLoaderGui ? Object.keys(window.modLoaderGui).slice(0, 12) : null,
-        };
-      })()`);
-      console.log('early:', JSON.stringify(await snap()));
-      await sleep(6000);
-      console.log('later:', JSON.stringify(await snap()));
       process.exit(0);
     }
     if (process.env.HK_PROBE === 'env') {
@@ -839,6 +821,71 @@ async function main() {
     const afterInput = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     check('L8 typing inside an input does not trigger hotkeys', afterInput !== 'options', afterInput);
     await cdp.evaluate(`document.getElementById('hkProbe')?.remove(); true`);
+
+    await openHotkeysTab(cdp);
+
+    const captureMouse = async (action, button) => {
+      await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="${action}"] .dolhk-key').click()`);
+      await sleep(160);
+      const point = await centerOf(cdp, `.dolhk-row[data-dolhk="${action}"] .dolhk-key`);
+      await mouseClick(cdp, button, point);
+      return cdp.evaluate(`({
+        text: document.querySelector('.dolhk-row[data-dolhk="${action}"] .dolhk-key').textContent,
+        stored: JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.${action}?.join('|') ?? '',
+      })`);
+    };
+
+    const middle = await captureMouse('saves', 'middle');
+    check(
+      'L18 middle button recorded as its own code',
+      middle.text === 'Middle' && middle.stored === 'Mouse1',
+      JSON.stringify(middle),
+    );
+    const sideBack = await captureMouse('journal', 'back');
+    check(
+      'L18 back side button recorded as its own code',
+      sideBack.text === 'Back' && sideBack.stored === 'Mouse3',
+      JSON.stringify(sideBack),
+    );
+    const sideForward = await captureMouse('feats', 'forward');
+    check(
+      'L18 forward side button recorded as its own code',
+      sideForward.text === 'Forward' && sideForward.stored === 'Mouse4',
+      JSON.stringify(sideForward),
+    );
+
+    await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="characteristics"] .dolhk-key').click()`);
+    await sleep(160);
+    const chordPoint = await centerOf(cdp, '.dolhk-row[data-dolhk="characteristics"] .dolhk-key');
+    await keyEvent(cdp, 'keyDown', { code: 'ControlLeft', key: 'Control', vk: 17, modifiers: 0 });
+    await mouseClick(cdp, 'middle', chordPoint, 2);
+    await keyEvent(cdp, 'keyUp', { code: 'ControlLeft', key: 'Control', vk: 17, modifiers: 0 });
+    await sleep(200);
+    const mouseChord = await cdp.evaluate(`({
+      text: document.querySelector('.dolhk-row[data-dolhk="characteristics"] .dolhk-key').textContent,
+      stored: JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.characteristics?.join('|') ?? '',
+    })`);
+    check(
+      'L18 modifier plus mouse button forms one chord',
+      mouseChord.text === 'Ctrl + Middle' && mouseChord.stored === 'Ctrl+Mouse1',
+      JSON.stringify(mouseChord),
+    );
+
+    const idle = { x: 700, y: 560 };
+    await cdp.evaluate(`closeOverlay()`);
+    await sleep(300);
+    await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await mouseClick(cdp, 'middle', idle);
+    const mouseOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
+    check('L18 middle button triggers its action in game', mouseOpened === 'saves', mouseOpened);
+    await cdp.evaluate(`closeOverlay()`);
+    await sleep(250);
+    await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await mouseClick(cdp, 'back', idle);
+    const sideOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
+    check('L18 side button triggers its action in game', sideOpened === 'journal', sideOpened);
+    await cdp.evaluate(`closeOverlay()`);
+    await sleep(300);
 
     const hotkeyErrors = cdp.errors.filter(text => /dol-hotkeys|hotkeys\.js|hotkeys-early\.js/.test(text));
     check('L2 no mod related console errors', hotkeyErrors.length === 0, hotkeyErrors.slice(0, 3).join(' | '));
