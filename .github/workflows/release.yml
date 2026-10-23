@@ -94,7 +94,7 @@ jobs:
             gh release upload "${GITHUB_REF_NAME}" $asset --clobber
           else
             gh release create "${GITHUB_REF_NAME}" $asset \
-              --title "DoL Hotkeys ${GITHUB_REF_NAME}" \
+              --title "DoL-Hotkeys-${GITHUB_REF_NAME}" \
               --notes-file notes.md \
               $pre
           fi
