@@ -1,21 +1,31 @@
 import { isAvailable } from './actions';
 import { installBuiltins } from './builtins';
+import { checkDeclarations } from './decl';
 import { install } from './engine';
 import { currentLang, setLangOverride, t } from './i18n';
 import { applyVolumeOverride, installVolumeKeys } from './mobile';
 import { ensureTab, installTab, openPanel } from './panel';
 import * as registry from './registry';
-import { warnOnRegister } from './vanilla';
+import { clashOf, labelOfReserved, warnOnRegister } from './vanilla';
 import { getBind as storedBind, getConfig } from './settings';
 
 let listenersInstalled = false;
 
+function register(def: Parameters<typeof registry.register>[0]): boolean {
+  const ok = registry.register(def);
+  if (ok) {
+    const bind = getBind(def.id);
+    if (bind) warnOnRegister(def.id, bind);
+  }
+  return ok;
+}
+
 function drainQueue(): void {
   const queue = window.DoLHK_QUEUE;
   if (Array.isArray(queue)) {
-    for (const def of queue.splice(0)) registry.register(def as never);
+    for (const def of queue.splice(0)) register(def as never);
   }
-  window.DoLHK_QUEUE = { push: (def: unknown) => registry.register(def as never) } as never;
+  window.DoLHK_QUEUE = { push: (def: unknown) => register(def as never) } as never;
 }
 
 function getBind(id: string): string[] | null {
@@ -48,14 +58,7 @@ function init(): boolean {
 window.DoLHK = {
   api: 1,
   version: __DOLHK_VERSION__,
-  register: (def) => {
-    const ok = registry.register(def);
-    if (ok) {
-      const bind = getBind(def.id);
-      if (bind) warnOnRegister(def.id, bind);
-    }
-    return ok;
-  },
+  register,
   unregister: registry.unregister,
   getBind,
   openPanel,
@@ -68,6 +71,10 @@ window.DoLHK = {
 };
 
 installBuiltins();
+checkDeclarations(bind => {
+  const clash = clashOf(bind);
+  return clash ? labelOfReserved(clash, currentLang()) : undefined;
+});
 drainQueue();
 
 function boot(): void {

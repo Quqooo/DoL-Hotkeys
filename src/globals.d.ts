@@ -52,6 +52,7 @@ declare global {
       refreshTab: () => void;
     };
     DoLHK_QUEUE?: unknown[] | { push: (def: unknown) => unknown };
+    DoLHK_DECL?: unknown[];
   }
 }
 

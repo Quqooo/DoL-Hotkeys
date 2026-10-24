@@ -1,3 +1,4 @@
+import { withDeclaration } from './decl';
 import { normalizeBind, parseMousetrap } from './keys';
 import { ACTION_ORDER, type ActionId, type Bind, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from './types';
 
@@ -58,7 +59,8 @@ export function resolveLabel(text: LocalizedText | undefined, id: string, lang: 
   return typeof fallback === 'string' && fallback.trim() ? fallback.trim() : id;
 }
 
-export function register(input: HotkeyDefInput): boolean {
+export function register(raw: HotkeyDefInput): boolean {
+  const input = withDeclaration(raw);
   if (!input || typeof input !== 'object') {
     warn('register() rejected: definition must be an object');
     return false;

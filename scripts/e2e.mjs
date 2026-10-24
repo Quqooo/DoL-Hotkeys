@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -16,6 +16,12 @@ const EXTRA_ZIPS = (process.env.HK_EXTRA_ZIPS ?? '')
   .split(',')
   .map(item => item.trim())
   .filter(Boolean);
+const DECL_FIXTURE = path.join(OUTPUT_DIR, 'fixture-decl.zip');
+const USE_DECL_FIXTURE = process.env.HK_DECL_FIXTURE !== '0';
+if (USE_DECL_FIXTURE) {
+  if (!existsSync(DECL_FIXTURE)) spawnSync(process.execPath, [path.join(root, 'scripts', 'make-decl-fixture.mjs')], { stdio: 'inherit' });
+  if (!EXTRA_ZIPS.includes(DECL_FIXTURE)) EXTRA_ZIPS.unshift(DECL_FIXTURE);
+}
 const BROWSERS = [
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
   'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
@@ -703,8 +709,10 @@ async function main() {
     const panelReady = await cdp.waitFor(`document.querySelector('.dolhk')`);
     check('L3 panel renders', panelReady);
 
-    const rows = await cdp.evaluate(`[...document.querySelectorAll('.dolhk-row[data-dolhk]')].map(r => r.dataset.dolhk)`);
-    check('L3 eleven bindable actions listed', rows.length === 11, rows.join(','));
+    const BUILTIN_IDS = ['back', 'forward', 'characteristics', 'social', 'traits', 'journal', 'statistics', 'feats', 'options', 'saves', 'cheats'];
+    const allRows = await cdp.evaluate(`[...document.querySelectorAll('.dolhk-row[data-dolhk]')].map(r => r.dataset.dolhk)`);
+    const rows = allRows.filter(id => BUILTIN_IDS.includes(id));
+    check('L3 eleven bindable actions listed', rows.length === 11, allRows.join(','));
     check(
       'L3 new pages are listed',
       ['traits', 'statistics', 'feats', 'cheats'].every(id => rows.includes(id)),
@@ -777,9 +785,10 @@ async function main() {
       const ungroupedInCommon = Boolean(commonSection?.querySelector('[data-dolhk="e2e.ungrouped"]'));
       return { headers, badge, dupText, ungroupedInCommon };
     })()`);
+    const ownHeaders = panelRows.headers.filter(text => !/夹具|Fixture/.test(text));
     check(
       'L22 third-party rows render with badges and groups',
-      panelRows.headers.join('|') === '常用快捷键|组甲|组乙' || panelRows.headers.join('|') === 'Common hotkeys|Group A|Group B',
+      ownHeaders.join('|') === '常用快捷键|组甲|组乙' || ownHeaders.join('|') === 'Common hotkeys|Group A|Group B',
       JSON.stringify(panelRows.headers),
     );
     check(
@@ -803,17 +812,103 @@ async function main() {
     check('L22 vanilla collision is reported on the row', /原版|vanilla/i.test(vanillaRow), vanillaRow);
 
     const removedRows = await cdp.evaluate(`(() => {
+      const headers = () => [...document.querySelectorAll('.dolhk-sections .settingsHeader')].map(n => n.textContent);
+      const before = headers();
       for (const id of ['e2e.ungrouped', 'e2e.groupA', 'e2e.groupB']) window.DoLHK.unregister(id);
       return {
         rows: document.querySelectorAll('.dolhk-row[data-dolhk^="e2e."]').length,
-        headers: [...document.querySelectorAll('.dolhk-sections .settingsHeader')].length,
+        before,
+        after: headers(),
       };
     })()`);
     check(
       'L22 unregister repaints the panel',
-      removedRows.rows === 0 && removedRows.headers === 1,
+      removedRows.rows === 0 && removedRows.after.length === removedRows.before.length - 2,
       JSON.stringify(removedRows),
     );
+
+    if (USE_DECL_FIXTURE) {
+      const decl = await cdp.evaluate(`(() => {
+        const api = window.DoLHK;
+        const row = id => document.querySelector(\`.dolhk-row[data-dolhk="\${id}"]\`);
+        const keyOf = id => row(id)?.querySelector('.dolhk-key')?.textContent ?? '';
+        const warnOf = id => row(id)?.querySelector('.dolhk-warn')?.textContent ?? '';
+        const results = (window.__declFixture || {}).results || {};
+        const textOf = node => (node ? node.textContent.trim() : '');
+        const isFixture = text => /夹具|Fixture/i.test(text);
+        return {
+          results,
+          declared: (window.DoLHK_DECL || []).length,
+          actBind: api.getBind('fixture.act'),
+          actKey: keyOf('fixture.act'),
+          actLabel: textOf(row('fixture.act')?.querySelector('.gold')),
+          actGroup: [...document.querySelectorAll('.dolhk-sections .settingsHeader')].map(n => n.textContent).filter(isFixture),
+          actRegistered: Boolean(row('fixture.act')),
+          declOnlyRow: Boolean(row('fixture.declonly')),
+          declOnlyBind: api.getBind('fixture.declonly'),
+          vanillaWarn: warnOf('fixture.vanilla'),
+          dupKey: keyOf('fixture.dup'),
+          dupLabel: textOf(row('fixture.dup')?.querySelector('.gold')),
+          dupWarn: warnOf('fixture.dup'),
+          dupRegistered: Boolean(row('fixture.dup')),
+          incompleteRegistered: Boolean(row('fixture.incomplete')),
+          typoRegistered: Boolean(row('fixture.typo')),
+        };
+      })()`);
+
+      check('L23 addon declarations reach the mod', decl.declared >= 2, `${decl.declared} records`);
+      check(
+        'L23 declared-only entry never becomes a row',
+        decl.declOnlyRow === false && decl.declOnlyBind === null,
+        JSON.stringify({ row: decl.declOnlyRow, bind: decl.declOnlyBind }),
+      );
+      check(
+        'L23 declaration fills the missing defaultBind and label',
+        decl.actRegistered &&
+          JSON.stringify(decl.actBind) === '["AltLeft","ShiftLeft","KeyK"]' &&
+          decl.actKey === 'Alt + Shift + K' &&
+          /夹具动作|Fixture action/.test(decl.actLabel),
+        JSON.stringify({ bind: decl.actBind, key: decl.actKey, label: decl.actLabel }),
+      );
+      check('L23 shared group from params is applied', decl.actGroup.length === 1, JSON.stringify(decl.actGroup));
+      check(
+        'L23 first declaration wins over a later duplicate',
+        decl.dupRegistered && decl.dupKey === 'Alt + Shift + M' && /首个声明|First declaration/.test(decl.dupLabel),
+        JSON.stringify({ key: decl.dupKey, label: decl.dupLabel }),
+      );
+      check(
+        'L23 declared vanilla clash is reported on the row',
+        /原版|vanilla/i.test(decl.vanillaWarn),
+        decl.vanillaWarn,
+      );
+      check(
+        'L23 incomplete definition still fails without a declared bind',
+        decl.incompleteRegistered === false,
+        JSON.stringify({ registered: decl.incompleteRegistered }),
+      );
+      check(
+        'L23 a misnamed addonName leaves the definition unusable',
+        decl.typoRegistered === false,
+        JSON.stringify({ registered: decl.typoRegistered }),
+      );
+
+      const declWarnings = await cdp.evaluate(`(window.__declWarnings || []).slice()`);
+      check(
+        'L23 declaration problems are reported once each',
+        declWarnings.some(line => /already declared/.test(line)) &&
+          declWarnings.some(line => /targets version "2\.0\.0"/.test(line)),
+        declWarnings.slice(0, 3).join(' | '),
+      );
+
+      await cdp.evaluate(`closeOverlay()`);
+      await sleep(300);
+      await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+      await combo(cdp, ['Alt', 'Shift'], 'KeyK', 'k', 75);
+      const fired = await cdp.evaluate(`(window.__declFixture || {}).fired`);
+      check('L23 declared binding dispatches the runtime handler', fired === 'act', String(fired));
+      await cdp.evaluate(`window.DoLHK.unregister('fixture.act'); window.DoLHK.unregister('fixture.vanilla'); window.DoLHK.unregister('fixture.dup'); true`);
+      await openHotkeysTab(cdp);
+    }
 
     const columns = await cdp.evaluate(`(() => {
       const read = sel => getComputedStyle(document.querySelector(sel)).gridTemplateColumns.split(' ').length;

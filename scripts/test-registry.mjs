@@ -14,8 +14,10 @@ await build({
   platform: 'neutral',
   outfile: out,
   logLevel: 'error',
+  define: { __DOLHK_VERSION__: JSON.stringify('1.0.2') },
 });
 
+globalThis.window = globalThis;
 const r = await import(`file://${out}`);
 
 let failed = 0;

@@ -115,3 +115,36 @@ try {
 } catch {
   /* 全局不可配置时为只读，检测回退到内置快照 */
 }
+
+/** 每个模组的第 n 次回调对应其第 n 条声明，避免同一次注册被重复采集 */
+const cursor = new WeakMap<object, number>();
+
+function registerAddon(): void {
+  const manager = (window as any).modSC2DataManager?.getAddonPluginManager?.();
+  if (!manager || typeof manager.registerAddonPlugin !== 'function') return;
+  try {
+    manager.registerAddonPlugin('DoL Hotkeys', 'hotkeys', {
+      async registerMod(_addonName: string, mod: any): Promise<void> {
+        const declared = mod?.bootJson?.addonPlugin;
+        if (!Array.isArray(declared)) return;
+        const matches = declared.filter(
+          (entry: any) => entry?.modName === 'DoL Hotkeys' && entry?.addonName === 'hotkeys',
+        );
+        const index = cursor.get(mod) ?? 0;
+        cursor.set(mod, index + 1);
+        const entry = matches[index];
+        if (!entry) return;
+        const list = (window.DoLHK_DECL ??= []);
+        list.push({
+          modName: typeof mod?.name === 'string' ? mod.name : '',
+          params: entry.params ?? null,
+          declaredVersion: entry.modVersion ?? null,
+        });
+      },
+    });
+  } catch (error) {
+    console.warn('[dol-hotkeys] addon registration failed', error);
+  }
+}
+
+registerAddon();
