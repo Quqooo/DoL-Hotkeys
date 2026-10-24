@@ -1,6 +1,6 @@
-import { keyLabel } from './keys';
+import { keyLabel } from '../core/keys';
 import { SNAPSHOT_ENGINE, SNAPSHOT_LOADER, SNAPSHOT_MOUSETRAP } from './original-keys';
-import type { OrigEntry } from './types';
+import type { OrigEntry } from '../core/types';
 
 interface CaseGroup {
   labels: string[];

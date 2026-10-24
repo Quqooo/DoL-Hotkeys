@@ -1,5 +1,5 @@
 import { currentPassage, engine, gameVariables, stateTemp, wikifyEval } from './game';
-import { OVERLAY_OF, type ActionId } from './types';
+import { OVERLAY_OF, type ActionId } from '../core/types';
 
 export function inGame(): boolean {
   const variables = gameVariables();

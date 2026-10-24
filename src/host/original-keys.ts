@@ -1,4 +1,4 @@
-import type { OrigEntry } from './types';
+import type { OrigEntry } from '../core/types';
 
 export const SNAPSHOT_ENGINE: OrigEntry[] = [
   { keys: '1 – 0 / Num 1 – 0', kind: 'links', offset: 0, detected: false },

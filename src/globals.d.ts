@@ -1,4 +1,4 @@
-import type { Bind, HotkeyDefInput, Lang } from './types';
+import type { Bind, HotkeyDefInput, Lang } from './core/types';
 
 export interface EarlyBinding {
   keys: string;

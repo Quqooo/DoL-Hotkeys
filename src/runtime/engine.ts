@@ -6,9 +6,9 @@ import {
   isCapturing,
 } from './capture';
 import { dispatch } from './dispatch';
-import { gameVariables } from './game';
-import { modifierFamily, mouseButtonOf } from './keys';
-import type { Bind } from './types';
+import { gameVariables } from '../host/game';
+import { modifierFamily, mouseButtonOf } from '../core/keys';
+import type { Bind } from '../core/types';
 
 const NON_TEXT_INPUTS = new Set(['radio', 'button', 'checkbox', 'submit', 'reset', 'image', 'range', 'color', 'file']);
 

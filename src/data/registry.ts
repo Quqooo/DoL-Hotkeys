@@ -1,6 +1,6 @@
 import { withDeclaration } from './decl';
-import { normalizeBind, parseMousetrap } from './keys';
-import { ACTION_ORDER, type ActionId, type Bind, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from './types';
+import { normalizeBind, parseMousetrap } from '../core/keys';
+import { ACTION_ORDER, type ActionId, type Bind, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from '../core/types';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
 const MAX_LABEL = 80;

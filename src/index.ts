@@ -1,12 +1,12 @@
 import { installBuiltins } from './builtins';
-import { checkDeclarations } from './decl';
-import { install } from './engine';
-import { currentLang, setLangOverride, t } from './i18n';
-import { applyVolumeOverride, installVolumeKeys } from './mobile';
-import { ensureTab, installTab, openPanel } from './panel';
-import * as registry from './registry';
-import { clashOf, labelOfReserved, warnOnRegister } from './vanilla';
-import { getBind as storedBind, getConfig } from './settings';
+import { checkDeclarations } from './data/decl';
+import { install } from './runtime/engine';
+import { currentLang, setLangOverride, t } from './ui/i18n';
+import { applyVolumeOverride, installVolumeKeys } from './host/mobile';
+import { ensureTab, installTab, openPanel } from './ui/panel';
+import * as registry from './data/registry';
+import { clashOf, labelOfReserved, warnOnRegister } from './host/vanilla';
+import { getBind as storedBind, getConfig } from './core/settings';
 
 let listenersInstalled = false;
 

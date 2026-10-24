@@ -1,5 +1,5 @@
-import { bindKey, parseMousetrap } from './keys';
-import type { Bind, Lang } from './types';
+import { bindKey, parseMousetrap } from '../core/keys';
+import type { Bind, Lang } from '../core/types';
 
 export interface ReservedBind {
   key: string;

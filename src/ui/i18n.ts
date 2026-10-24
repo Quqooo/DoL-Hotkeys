@@ -1,4 +1,4 @@
-import type { ActionId, Lang } from './types';
+import type { ActionId, Lang } from '../core/types';
 
 export interface Dict {
   tab: string;

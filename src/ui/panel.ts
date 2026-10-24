@@ -1,13 +1,13 @@
-import { cancelCapture, isCapturing, startCapture } from './capture';
-import { detect } from './detect';
-import { confirmDialog } from './dialog';
-import { stateTemp } from './game';
+import { cancelCapture, isCapturing, startCapture } from '../runtime/capture';
+import { detect } from '../host/detect';
+import { confirmDialog } from '../host/dialog';
+import { stateTemp } from '../host/game';
 import { currentLang, invalidateLang, setLangOverride, t } from './i18n';
-import { bindHasDigit, bindKey, bindLabel, mouseButtonOf } from './keys';
-import { applyVolumeOverride, hasCordova } from './mobile';
-import { get as getEntry, groupOf, labelOf, list as listRegistry, subscribe as subscribeRegistry } from './registry';
-import { clashOf, labelOfReserved } from './vanilla';
-import { getConfig, resetBind, saveConfig, setBind, setConflictMode } from './settings';
+import { bindHasDigit, bindKey, bindLabel, mouseButtonOf } from '../core/keys';
+import { applyVolumeOverride, hasCordova } from '../host/mobile';
+import { get as getEntry, groupOf, labelOf, list as listRegistry, subscribe as subscribeRegistry } from '../data/registry';
+import { clashOf, labelOfReserved } from '../host/vanilla';
+import { getConfig, resetBind, saveConfig, setBind, setConflictMode } from '../core/settings';
 import {
   ACTION_ORDER,
   type ActionId,
@@ -16,7 +16,7 @@ import {
   type LangMode,
   type OrigEntry,
   type RegisteredHotkey,
-} from './types';
+} from '../core/types';
 
 const BROWSER_RESERVED: Bind[] = [
   ['ControlLeft', 'KeyS'],

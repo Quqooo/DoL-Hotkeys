@@ -1,5 +1,5 @@
-import { MAX_CHORD_ATOMS, mouseButtonOf } from './keys';
-import type { Bind } from './types';
+import { MAX_CHORD_ATOMS, mouseButtonOf } from '../core/keys';
+import type { Bind } from '../core/types';
 
 /** 组合静默超时（毫秒），超时后结束录制 */
 const CAPTURE_IDLE = 1000;

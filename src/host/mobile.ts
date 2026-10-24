@@ -1,5 +1,5 @@
 import { runAction } from './actions';
-import { getConfig } from './settings';
+import { getConfig } from '../core/settings';
 
 export function hasCordova(): boolean {
   const cordova = window.cordova;

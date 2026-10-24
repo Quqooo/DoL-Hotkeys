@@ -1,4 +1,4 @@
-import type { Bind, HotkeyDefInput, LocalizedText } from './types';
+import type { Bind, HotkeyDefInput, LocalizedText } from '../core/types';
 
 interface DeclFields {
   label?: LocalizedText;

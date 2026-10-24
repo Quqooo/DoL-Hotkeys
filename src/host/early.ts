@@ -1,4 +1,4 @@
-import type { EarlyRegistry } from './globals';
+import type { EarlyRegistry } from '../globals';
 
 const registry: EarlyRegistry = { bindings: [], native: [], mousetrapSeen: false };
 

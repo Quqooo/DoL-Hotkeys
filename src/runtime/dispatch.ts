@@ -1,7 +1,7 @@
-import { bindKey } from './keys';
-import { list as listEntries, revision as registryRevision } from './registry';
-import { conflictMode, getConfig, revision as settingsRevision } from './settings';
-import { ACTION_ORDER, type ActionId, type Bind, type RegisteredHotkey } from './types';
+import { bindKey } from '../core/keys';
+import { list as listEntries, revision as registryRevision } from '../data/registry';
+import { conflictMode, getConfig, revision as settingsRevision } from '../core/settings';
+import { ACTION_ORDER, type ActionId, type Bind, type RegisteredHotkey } from '../core/types';
 
 interface Candidate {
   entry: RegisteredHotkey;
