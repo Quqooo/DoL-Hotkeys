@@ -16,9 +16,14 @@ const NON_TEXT_INPUTS = new Set(['radio', 'button', 'checkbox', 'submit', 'reset
 let held: Bind = [];
 const claimed = new Set<number>();
 
-function shouldIgnore(): boolean {
+/** tempDisable 是不可覆盖的硬守卫 */
+function hardBlocked(): boolean {
   const variables = gameVariables();
-  if (variables && variables.tempDisable) return true;
+  return Boolean(variables && variables.tempDisable);
+}
+
+/** 输入框内默认不派发，仅 inInput 的条目可候选 */
+function inputBlocked(): boolean {
   const element = document.activeElement as HTMLElement | null;
   if (!element) return false;
   const tag = element.tagName;
@@ -64,8 +69,8 @@ function trimModifiers(e: KeyboardEvent): void {
 
 function pressAtom(code: string, event: Event): boolean {
   if (!held.includes(code)) held.push(code);
-  const action = dispatch(held);
-  if (!action) return false;
+  const hit = dispatch(held, event, inputBlocked());
+  if (!hit) return false;
   event.preventDefault();
   return true;
 }
@@ -76,7 +81,7 @@ function onKeyDown(e: KeyboardEvent): void {
     return;
   }
   if (e.repeat) return;
-  if (shouldIgnore()) {
+  if (hardBlocked()) {
     resetHeld();
     return;
   }
@@ -100,7 +105,7 @@ function onMouseDown(e: MouseEvent): void {
     }
     return;
   }
-  if (shouldIgnore()) {
+  if (hardBlocked()) {
     resetHeld();
     return;
   }
@@ -132,4 +137,3 @@ export function install(): void {
   window.addEventListener('blur', resetHeld);
   document.addEventListener('visibilitychange', resetHeld);
 }
-

@@ -1,4 +1,5 @@
 import { isAvailable } from './actions';
+import { installBuiltins } from './builtins';
 import { install } from './engine';
 import { currentLang, setLangOverride, t } from './i18n';
 import { applyVolumeOverride, installVolumeKeys } from './mobile';
@@ -58,6 +59,7 @@ window.DoLHK = {
   refreshTab: ensureTab,
 };
 
+installBuiltins();
 drainQueue();
 
 function boot(): void {

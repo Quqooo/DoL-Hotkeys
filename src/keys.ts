@@ -345,3 +345,13 @@ export function bindLabel(bind: Bind): string {
 export function bindHasDigit(bind: Bind): boolean {
   return bind.some(atom => /^(Digit|Numpad)\d/.test(atom));
 }
+
+/** 匹配表键：修饰键按族归并，顺序保留 */
+export function bindKey(bind: Bind): string {
+  return bind
+    .map(atom => {
+      const family = modifierFamily(atom);
+      return family ? `@${family}` : atom;
+    })
+    .join('|');
+}

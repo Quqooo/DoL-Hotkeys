@@ -84,6 +84,10 @@ export interface RegisteredHotkey {
   available: () => boolean;
   priority: number;
   inInput: boolean;
+  /** 内置动作：同优先级时优先于第三方 */
+  builtin: boolean;
+  /** 注册顺序，用于同优先级排序 */
+  order: number;
 }
 
 export interface Config {

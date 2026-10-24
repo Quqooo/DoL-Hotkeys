@@ -190,6 +190,10 @@ export function currentLang(): Lang {
   return detected;
 }
 
+export function dictFor(lang: Lang): Dict {
+  return DICTS[lang];
+}
+
 export function t(): Dict {
-  return DICTS[currentLang()];
+  return dictFor(currentLang());
 }

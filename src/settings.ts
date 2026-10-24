@@ -51,6 +51,7 @@ function defaults(): Config {
 }
 
 let cache: Config | null = null;
+let rev = 0;
 
 /** v1→v2：仅在旧编码上替换默认键，避免影响用户自定义 */
 function migrateV1ToV2(rawBinds: Record<string, unknown>): void {
@@ -145,9 +146,14 @@ export function getBind(id: string): Bind | null {
   return bind ? [...bind] : null;
 }
 
+export function revision(): number {
+  return rev;
+}
+
 export function setBind(id: string, bind: Bind): void {
   const config = getConfig();
   config.binds[id] = [...bind];
+  rev++;
   saveConfig();
 }
 

@@ -1,13 +1,19 @@
 import { normalizeBind, parseMousetrap } from './keys';
-import type { Bind, HotkeyDefInput, Lang, LocalizedText, RegisteredHotkey } from './types';
+import { ACTION_ORDER, type ActionId, type Bind, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from './types';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
 const MAX_LABEL = 80;
 
 const entries = new Map<string, RegisteredHotkey>();
+let counter = 0;
+let rev = 0;
 
 function warn(message: string): void {
   console.warn(`[dol-hotkeys] ${message}`);
+}
+
+export function revision(): number {
+  return rev;
 }
 
 export function isValidId(id: string): boolean {
@@ -60,6 +66,23 @@ export function register(input: HotkeyDefInput): boolean {
     return false;
   }
 
+  store(input, id, bind, false);
+  return true;
+}
+
+/** 内置动作走内部注册：id 不需要命名空间，但必须属于 ACTION_ORDER */
+export function registerBuiltin(input: HotkeyDefInput): boolean {
+  const id = input.id;
+  if (!ACTION_ORDER.includes(id as ActionId)) return false;
+  if (entries.has(id)) return false;
+  if (typeof input.handler !== 'function') return false;
+  const bind = toBind(input.defaultBind);
+  if (!bind) return false;
+  store(input, id, bind, true);
+  return true;
+}
+
+function store(input: HotkeyDefInput, id: string, bind: Bind, builtin: boolean): void {
   entries.set(id, {
     id,
     handler: input.handler,
@@ -69,12 +92,16 @@ export function register(input: HotkeyDefInput): boolean {
     available: typeof input.available === 'function' ? input.available : () => true,
     priority: typeof input.priority === 'number' && Number.isFinite(input.priority) ? input.priority : 0,
     inInput: input.inInput === true,
+    builtin,
+    order: counter++,
   });
-  return true;
+  rev++;
 }
 
 export function unregister(id: string): boolean {
-  return entries.delete(id);
+  const removed = entries.delete(id);
+  if (removed) rev++;
+  return removed;
 }
 
 export function get(id: string): RegisteredHotkey | undefined {
