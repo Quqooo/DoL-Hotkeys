@@ -1,5 +1,7 @@
 export interface EarlyBinding {
   keys: string;
+  /** 该条目的原始组合串，用于按组合解除绑定 */
+  combos: string[];
   src: string;
 }
 

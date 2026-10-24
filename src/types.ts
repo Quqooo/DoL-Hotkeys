@@ -50,10 +50,18 @@ export interface OrigEntry {
 export type Lang = 'zh' | 'en';
 export type LangMode = 'auto' | Lang;
 
+/** 有序组合（`KeyboardEvent.code` / `MouseN`）；顺序即按下顺序，不做重排归一 */
+export type Bind = string[];
+
+export type ConflictMode = 'legacy' | 'all' | 'first';
+
 export interface Config {
   v: number;
   lang: LangMode;
   volumeKeys: boolean;
   volumeInvert: boolean;
-  binds: Record<ActionId, string[]>;
+  conflictMode: ConflictMode;
+  binds: Record<string, Bind>;
+  /** 曾注册过的第三方 id；缺席期间保留其键位 */
+  external: string[];
 }

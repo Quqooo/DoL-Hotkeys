@@ -3,26 +3,26 @@ import { detect } from './detect';
 import { confirmDialog } from './dialog';
 import { stateTemp } from './game';
 import { invalidateLang, setLangOverride, t } from './i18n';
-import { formatSequence, isDigitStep, mouseButtonOf, sameSequence, sameStep } from './keys';
+import { bindHasDigit, bindLabel, mouseButtonOf, sameBind } from './keys';
 import { applyVolumeOverride, hasCordova } from './mobile';
 import { getConfig, resetBind, saveConfig, setBind } from './settings';
-import { ACTION_ORDER, type ActionId, type LangMode, type OrigEntry } from './types';
+import { ACTION_ORDER, type ActionId, type Bind, type LangMode, type OrigEntry } from './types';
 
-const BROWSER_RESERVED = [
-  'Ctrl+KeyS',
-  'Ctrl+KeyW',
-  'Ctrl+KeyT',
-  'Ctrl+KeyN',
-  'Ctrl+KeyP',
-  'Ctrl+KeyF',
-  'Ctrl+KeyD',
-  'Ctrl+KeyL',
-  'Ctrl+KeyJ',
-  'F5',
-  'F11',
-  'F12',
-  'Alt+ArrowLeft',
-  'Alt+ArrowRight',
+const BROWSER_RESERVED: Bind[] = [
+  ['ControlLeft', 'KeyS'],
+  ['ControlLeft', 'KeyW'],
+  ['ControlLeft', 'KeyT'],
+  ['ControlLeft', 'KeyN'],
+  ['ControlLeft', 'KeyP'],
+  ['ControlLeft', 'KeyF'],
+  ['ControlLeft', 'KeyD'],
+  ['ControlLeft', 'KeyL'],
+  ['ControlLeft', 'KeyJ'],
+  ['F5'],
+  ['F11'],
+  ['F12'],
+  ['AltLeft', 'ArrowLeft'],
+  ['AltLeft', 'ArrowRight'],
 ];
 
 let rootEl: HTMLElement | null = null;
@@ -169,9 +169,9 @@ export function installTab(): void {
   ensureTab();
 }
 
-function setKeyText(target: HTMLButtonElement, steps: string[]): void {
-  target.classList.toggle('dolhk-empty', steps.length === 0);
-  target.textContent = steps.length ? formatSequence(steps) : t().empty;
+function setKeyText(target: HTMLButtonElement, bind: Bind): void {
+  target.classList.toggle('dolhk-empty', bind.length === 0);
+  target.textContent = bind.length ? bindLabel(bind) : t().empty;
 }
 
 function paintWarnings(action: ActionId): void {
@@ -179,29 +179,27 @@ function paintWarnings(action: ActionId): void {
   if (!slot) return;
   const s = t();
   const config = getConfig();
-  const steps = config.binds[action];
-  if (steps.length === 0) {
+  const bind = config.binds[action] ?? [];
+  if (bind.length === 0) {
     slot.textContent = '';
     return;
   }
   const messages: string[] = [];
   const earlier = ACTION_ORDER.slice(0, ACTION_ORDER.indexOf(action));
-  const duplicate = earlier.find(other => sameSequence(config.binds[other], steps));
+  const duplicate = earlier.find(other => sameBind(config.binds[other] ?? [], bind));
   if (duplicate) messages.push(s.warnDup(s.names[duplicate]));
-  if (steps.some(isDigitStep)) messages.push(s.warnDigit);
-  if (steps.some(step => BROWSER_RESERVED.some(reserved => sameStep(reserved, step)))) messages.push(s.warnBrowser);
-  if (steps.some(step => {
-    const button = mouseButtonOf(step);
-    return button === 3 || button === 4;
-  })) messages.push(s.warnSide);
-  if (steps.some(step => sameStep('Alt+KeyM', step))) messages.push(s.warnModLoader);
+  if (bindHasDigit(bind)) messages.push(s.warnDigit);
+  if (BROWSER_RESERVED.some(reserved => sameBind(reserved, bind))) messages.push(s.warnBrowser);
+  const button = mouseButtonOf(bind);
+  if (button === 3 || button === 4) messages.push(s.warnSide);
+  if (sameBind(['AltLeft', 'KeyM'], bind)) messages.push(s.warnModLoader);
   slot.textContent = messages.join(' · ');
 }
 
 function beginCapture(action: ActionId, target: HTMLButtonElement): void {
   if (isCapturing()) cancelCapture();
   const s = t();
-  const original = [...getConfig().binds[action]];
+  const original = [...(getConfig().binds[action] ?? [])];
   target.classList.remove('dolhk-empty');
   target.classList.add('dolhk-capturing');
   target.textContent = s.pressCombo;
@@ -214,17 +212,17 @@ function beginCapture(action: ActionId, target: HTMLButtonElement): void {
   };
 
   startCapture(
-    steps => {
-      target.textContent = steps.length > 0 ? formatSequence(steps) : s.pressCombo;
+    atoms => {
+      target.textContent = atoms.length > 0 ? bindLabel(atoms) : s.pressCombo;
     },
-    steps => {
+    atoms => {
       detachOutside();
       target.classList.remove('dolhk-capturing');
-      if (steps === null) {
+      if (atoms === null) {
         setKeyText(target, original);
         return;
       }
-      setBind(action, steps);
+      setBind(action, atoms);
       paintRows();
     },
   );

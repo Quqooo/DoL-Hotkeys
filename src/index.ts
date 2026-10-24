@@ -17,8 +17,7 @@ function init(): boolean {
   setLangOverride(config.lang);
   if (!listenersInstalled) {
     install();
-    // Registering a volume listener makes cordova override the keys by itself,
-    // so the stored setting has to be re-applied right after, even when off.
+    // 注册音量键监听会使 cordova 自动接管按键，随后需按配置重新声明一次（关闭状态亦然）
     installVolumeKeys();
     applyVolumeOverride(config.volumeKeys);
     listenersInstalled = true;

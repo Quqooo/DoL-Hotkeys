@@ -1,24 +1,17 @@
-import {
-  appendKey,
-  isModifierCode,
-  modsFromEvent,
-  mouseStepEvent,
-  sameMods,
-  splitStep,
-  stepFromEvent,
-  type StepEvent,
-} from './keys';
-import { MAX_SEQUENCE_STEPS } from './settings';
+import { MAX_CHORD_ATOMS, mouseButtonOf } from './keys';
+import type { Bind } from './types';
 
-const MAX_CHORD_KEYS = 8;
+/** 组合静默超时（毫秒），超时后结束录制 */
+const CAPTURE_IDLE = 1000;
 
-type UpdateFn = (steps: string[]) => void;
-type FinishFn = (steps: string[] | null) => void;
+type UpdateFn = (atoms: Bind) => void;
+type FinishFn = (atoms: Bind | null) => void;
 
 interface CaptureState {
-  steps: string[];
+  atoms: Bind;
   update: UpdateFn;
   finish: FinishFn;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 let active: CaptureState | null = null;
@@ -28,91 +21,93 @@ export function isCapturing(): boolean {
   return active !== null;
 }
 
+function clearTimer(state: CaptureState): void {
+  if (state.timer !== null) {
+    clearTimeout(state.timer);
+    state.timer = null;
+  }
+}
+
+function finishWith(atoms: Bind | null): void {
+  const state = active;
+  if (!state) return;
+  active = null;
+  held.clear();
+  clearTimer(state);
+  state.finish(atoms);
+}
+
+function arm(state: CaptureState): void {
+  clearTimer(state);
+  if (state.atoms.length === 0) return;
+  state.timer = setTimeout(() => finishWith([...state.atoms]), CAPTURE_IDLE);
+}
+
 export function startCapture(update: UpdateFn, finish: FinishFn): void {
-  active = { steps: [], update, finish };
+  if (active) finishWith(null);
+  active = { atoms: [], update, finish, timer: null };
   held.clear();
   update([]);
 }
 
-function press(input: StepEvent, repeat: boolean): boolean {
-  if (!active) return false;
-  if (isModifierCode(input.code)) return true;
+function press(code: string, repeat: boolean, hasModifier: boolean): boolean {
+  const state = active;
+  if (!state) return false;
   if (repeat) return true;
 
-  if (input.code === 'Escape') {
-    const { finish } = active;
-    active = null;
-    held.clear();
-    finish(null);
+  if (code === 'Escape') {
+    finishWith(null);
     return true;
   }
 
-  const plainBackspace =
-    input.code === 'Backspace' && !input.ctrlKey && !input.altKey && !input.shiftKey && !input.metaKey;
-  if (plainBackspace && active.steps.length === 0) {
-    const { finish } = active;
-    active = null;
-    held.clear();
-    finish([]);
+  const plainBackspace = code === 'Backspace' && !hasModifier;
+  if (plainBackspace && state.atoms.length === 0) {
+    finishWith([]);
     return true;
   }
 
-  const lastIndex = active.steps.length - 1;
-  if (lastIndex >= 0 && held.size > 0) {
-    const last = active.steps[lastIndex];
-    const { mods, codes } = splitStep(last);
-    if (sameMods(mods, modsFromEvent(input)) && codes.length < MAX_CHORD_KEYS) {
-      active.steps[lastIndex] = appendKey(last, input.code);
-      held.add(input.code);
-      active.update(active.steps.slice());
-      return true;
-    }
-  }
+  if (held.has(code)) return true;
+  if (state.atoms.length >= MAX_CHORD_ATOMS) return true;
+  if (state.atoms.includes(code)) return true;
 
-  if (active.steps.length >= MAX_SEQUENCE_STEPS) return true;
-
-  active.steps.push(stepFromEvent(input));
-  held.add(input.code);
-  active.update(active.steps.slice());
+  state.atoms.push(code);
+  held.add(code);
+  state.update([...state.atoms]);
+  arm(state);
   return true;
 }
 
-function release(code: string, modifierHeld: boolean): boolean {
-  if (!active) return false;
-  if (!isModifierCode(code)) held.delete(code);
-  if (modifierHeld) return true;
-  if (held.size > 0) return true;
-  if (active.steps.length === 0) return true;
-  const { steps, finish } = active;
-  active = null;
-  held.clear();
-  finish(steps);
+function release(code: string): boolean {
+  const state = active;
+  if (!state) return false;
+  held.delete(code);
+  if (held.size === 0 && state.atoms.length > 0) finishWith([...state.atoms]);
   return true;
+}
+
+function hasModifierOf(e: KeyboardEvent | MouseEvent): boolean {
+  return e.altKey || e.ctrlKey || e.shiftKey || e.metaKey;
 }
 
 export function captureKeyDown(e: KeyboardEvent): boolean {
-  return press(e, e.repeat);
+  return press(e.code, e.repeat, hasModifierOf(e));
 }
 
 export function captureKeyUp(e: KeyboardEvent): boolean {
-  return release(e.code, e.altKey || e.ctrlKey || e.shiftKey || e.metaKey);
+  return release(e.code);
 }
 
 export function captureMouseDown(e: MouseEvent): boolean {
-  const input = mouseStepEvent(e);
-  return input ? press(input, false) : false;
+  const code = `Mouse${e.button}`;
+  if (mouseButtonOf([code]) === null) return false;
+  return press(code, false, hasModifierOf(e));
 }
 
 export function captureMouseUp(e: MouseEvent): boolean {
-  const input = mouseStepEvent(e);
-  if (!input) return false;
-  return release(input.code, input.altKey || input.ctrlKey || input.shiftKey || input.metaKey);
+  return release(`Mouse${e.button}`);
 }
 
 export function cancelCapture(): void {
   if (!active) return;
-  const { finish } = active;
-  active = null;
-  held.clear();
-  finish(null);
+  finishWith(null);
 }

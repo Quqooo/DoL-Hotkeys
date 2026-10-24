@@ -1,27 +1,19 @@
-import { runAction } from './actions';
-import { gameVariables } from './game';
-import { captureKeyDown, captureKeyUp, captureMouseDown, captureMouseUp, isCapturing } from './capture';
 import {
-  appendKey,
-  isModifierCode,
-  modsFromEvent,
-  mouseStepEvent,
-  sameMods,
-  sameStep,
-  splitStep,
-  stepFromEvent,
-  stepIsPrefixOf,
-  type StepEvent,
-} from './keys';
-import { getConfig } from './settings';
-import { ACTION_ORDER, type ActionId } from './types';
+  captureKeyDown,
+  captureKeyUp,
+  captureMouseDown,
+  captureMouseUp,
+  isCapturing,
+} from './capture';
+import { dispatch } from './dispatch';
+import { gameVariables } from './game';
+import { modifierFamily, mouseButtonOf } from './keys';
+import type { Bind } from './types';
 
-const STEP_TIMEOUT = 1000;
 const NON_TEXT_INPUTS = new Set(['radio', 'button', 'checkbox', 'submit', 'reset', 'image', 'range', 'color', 'file']);
 
-let pending: string[] = [];
-let pendingAt = 0;
-let held = new Set<string>();
+/** 当前按下的原子，按按下顺序排列，直接作为匹配依据 */
+let held: Bind = [];
 const claimed = new Set<number>();
 
 function shouldIgnore(): boolean {
@@ -35,81 +27,47 @@ function shouldIgnore(): boolean {
   return element.isContentEditable === true;
 }
 
-function bindOf(action: ActionId): string[] {
-  return getConfig().binds[action];
+function resetHeld(): void {
+  held = [];
+  claimed.clear();
 }
 
-function matchExact(sequence: string[]): ActionId | null {
-  for (const action of ACTION_ORDER) {
-    const bind = bindOf(action);
-    if (bind.length === sequence.length && bind.every((step, i) => sameStep(step, sequence[i]))) return action;
-  }
-  return null;
+function removeAtom(code: string): void {
+  const index = held.indexOf(code);
+  if (index >= 0) held.splice(index, 1);
 }
 
-function matchesPrefix(sequence: string[]): boolean {
-  for (const action of ACTION_ORDER) {
-    const bind = bindOf(action);
-    if (bind.length === 0 || sequence.length > bind.length) continue;
-    const headOk = sequence.slice(0, -1).every((step, i) => sameStep(step, bind[i]));
-    if (!headOk) continue;
-    if (stepIsPrefixOf(sequence[sequence.length - 1], bind[sequence.length - 1])) return true;
-  }
-  return false;
+/** MouseEvent.button 到 buttons 位掩码的映射；中键为 4，右键为 2 */
+const MOUSE_BUTTON_BITS: Record<number, number> = { 0: 1, 1: 4, 2: 2, 3: 8, 4: 16 };
+
+/** 依据 buttons 掩码校正鼠标原子：覆盖层替换 DOM 时 mouseup 可能丢失，残留原子会导致后续组合无法匹配 */
+function trimMouseAtoms(mask: number): void {
+  held = held.filter(atom => {
+    const button = mouseButtonOf([atom]);
+    if (button === null) return true;
+    const bit = MOUSE_BUTTON_BITS[button] ?? 0;
+    return (mask & bit) !== 0;
+  });
 }
 
-function extend(sequence: string[], code: string): string[] {
-  const out = sequence.slice();
-  const last = out.length - 1;
-  out[last] = appendKey(out[last], code);
-  return out;
+/** 依据修饰键标志校正修饰原子，处理丢失的 keyup */
+function trimModifiers(e: KeyboardEvent): void {
+  held = held.filter(atom => {
+    const family = modifierFamily(atom);
+    if (!family) return true;
+    if (family === 'Control') return e.ctrlKey;
+    if (family === 'Shift') return e.shiftKey;
+    if (family === 'Alt') return e.altKey;
+    return e.metaKey;
+  });
 }
 
-function canExtend(input: StepEvent): boolean {
-  if (held.size === 0 || pending.length === 0) return false;
-  const { mods } = splitStep(pending[pending.length - 1]);
-  return sameMods(mods, modsFromEvent(input));
-}
-
-function handlePress(input: StepEvent, event: Event): boolean {
-  if (pending.length > 0 && Date.now() - pendingAt > STEP_TIMEOUT) pending = [];
-
-  const merging = canExtend(input);
-  held.add(input.code);
-
-  if (merging) {
-    const merged = extend(pending, input.code);
-    const mergedAction = matchExact(merged);
-    if (mergedAction) {
-      pending = [];
-      event.preventDefault();
-      runAction(mergedAction);
-      return true;
-    }
-    if (matchesPrefix(merged)) {
-      pending = merged;
-      pendingAt = Date.now();
-      event.preventDefault();
-      return true;
-    }
-  }
-
-  const sequence = [...pending, stepFromEvent(input)];
-  const action = matchExact(sequence);
-  if (action) {
-    pending = [];
-    event.preventDefault();
-    runAction(action);
-    return true;
-  }
-  if (matchesPrefix(sequence)) {
-    pending = sequence;
-    pendingAt = Date.now();
-    event.preventDefault();
-    return true;
-  }
-  pending = [];
-  return false;
+function pressAtom(code: string, event: Event): boolean {
+  if (!held.includes(code)) held.push(code);
+  const action = dispatch(held);
+  if (!action) return false;
+  event.preventDefault();
+  return true;
 }
 
 function onKeyDown(e: KeyboardEvent): void {
@@ -118,22 +76,23 @@ function onKeyDown(e: KeyboardEvent): void {
     return;
   }
   if (e.repeat) return;
-  if (isModifierCode(e.code)) return;
   if (shouldIgnore()) {
-    pending = [];
+    resetHeld();
     return;
   }
-  handlePress(e, e);
+  trimModifiers(e);
+  pressAtom(e.code, e);
 }
 
 function onKeyUp(e: KeyboardEvent): void {
-  if (isCapturing() && captureKeyUp(e)) e.preventDefault();
-  if (!isModifierCode(e.code)) held.delete(e.code);
+  if (isCapturing()) captureKeyUp(e);
+  removeAtom(e.code);
+  trimModifiers(e);
 }
 
 function onMouseDown(e: MouseEvent): void {
-  const input = mouseStepEvent(e);
-  if (!input) return;
+  const code = `Mouse${e.button}`;
+  if (mouseButtonOf([code]) === null) return;
   if (isCapturing()) {
     if (captureMouseDown(e)) {
       e.preventDefault();
@@ -142,21 +101,20 @@ function onMouseDown(e: MouseEvent): void {
     return;
   }
   if (shouldIgnore()) {
-    pending = [];
+    resetHeld();
     return;
   }
-  if (handlePress(input, e)) {
-    e.preventDefault();
-    claimed.add(e.button);
-  }
+  trimMouseAtoms(e.buttons);
+  if (pressAtom(code, e)) claimed.add(e.button);
 }
 
 function onMouseUp(e: MouseEvent): void {
-  const input = mouseStepEvent(e);
-  if (!input) return;
+  const code = `Mouse${e.button}`;
+  if (mouseButtonOf([code]) === null) return;
   if (claimed.has(e.button)) e.preventDefault();
   if (isCapturing()) captureMouseUp(e);
-  held.delete(input.code);
+  removeAtom(code);
+  trimMouseAtoms(e.buttons);
 }
 
 function onAuxClick(e: MouseEvent): void {
@@ -165,18 +123,13 @@ function onAuxClick(e: MouseEvent): void {
   e.stopPropagation();
 }
 
-function resetPending(): void {
-  pending = [];
-  held.clear();
-  claimed.clear();
-}
-
 export function install(): void {
   document.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('keyup', onKeyUp, true);
   document.addEventListener('mousedown', onMouseDown, true);
   document.addEventListener('mouseup', onMouseUp, true);
   document.addEventListener('auxclick', onAuxClick, true);
-  window.addEventListener('blur', resetPending);
-  document.addEventListener('visibilitychange', resetPending);
+  window.addEventListener('blur', resetHeld);
+  document.addEventListener('visibilitychange', resetHeld);
 }
+

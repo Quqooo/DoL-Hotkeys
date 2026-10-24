@@ -97,7 +97,7 @@ class Cdp {
         ]);
         if (probe) return true;
       } catch {
-        /* page may be navigating or busy */
+        /* 页面可能正在导航或忙碌 */
       }
       await sleep(250);
     }
@@ -864,19 +864,21 @@ async function main() {
       { code: 'KeyJ', key: 'j', vk: 74 },
     ]);
     const boundText = await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="journal"] .dolhk-key').textContent`);
-    check('L5 sequence captured and rendered', /Ctrl \+ K.*→.*Ctrl \+ J/.test(boundText), boundText);
+    check('L5 chord captured and rendered', boundText === 'Ctrl + K + J', boundText);
     const stored = await cdp.evaluate(
       `JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.journal?.join('|') ?? ''`,
     );
-    check('L5 sequence persisted to localStorage', stored === 'Ctrl+KeyK|Ctrl+KeyJ', stored);
+    check('L5 chord persisted as one ordered bind', stored === 'ControlLeft|KeyK|KeyJ', stored);
 
     await cdp.evaluate(`closeOverlay()`);
     await sleep(300);
     await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
-    await combo(cdp, ['Ctrl'], 'KeyK', 'k', 75);
-    await combo(cdp, ['Ctrl'], 'KeyJ', 'j', 74);
+    await holdChord(cdp, ['Ctrl'], [
+      { code: 'KeyK', key: 'k', vk: 75 },
+      { code: 'KeyJ', key: 'j', vk: 74 },
+    ]);
     const journalOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
-    check('L5 sequence works in game', journalOpened === 'journal', journalOpened);
+    check('L5 chord works in game', journalOpened === 'journal', journalOpened);
 
     await cdp.evaluate(`closeOverlay()`);
     await sleep(200);
@@ -895,7 +897,7 @@ async function main() {
     const chordStored = await cdp.evaluate(
       `JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.traits?.join('|') ?? ''`,
     );
-    check('L17 chord persisted as a single step', chordStored === 'Ctrl+KeyA,KeyB', chordStored);
+    check('L17 chord persisted as one ordered bind', chordStored === 'ControlLeft|KeyA|KeyB', chordStored);
 
     await cdp.evaluate(`closeOverlay()`);
     await sleep(250);
@@ -946,7 +948,7 @@ async function main() {
     const warnStored = await cdp.evaluate(
       `JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.saves?.join('|') ?? ''`,
     );
-    check('L7 browser reserved combo warns but still saves', warnStored === 'Ctrl+KeyS' && warnText.length > 0, warnText);
+    check('L7 browser reserved combo warns but still saves', warnStored === 'ControlLeft|KeyS' && warnText.length > 0, warnText);
 
     await cdp.evaluate(`closeOverlay()`);
     await sleep(250);
@@ -1004,7 +1006,7 @@ async function main() {
     })`);
     check(
       'L18 modifier plus mouse button forms one chord',
-      mouseChord.text === 'Ctrl + Middle' && mouseChord.stored === 'Ctrl+Mouse1',
+      mouseChord.text === 'Ctrl + Middle' && mouseChord.stored === 'ControlLeft|Mouse1',
       JSON.stringify(mouseChord),
     );
 
@@ -1019,6 +1021,7 @@ async function main() {
     await sleep(250);
     await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
     await mouseClick(cdp, 'back', idle);
+
     const sideOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     check('L18 side button triggers its action in game', sideOpened === 'journal', sideOpened);
     await cdp.evaluate(`closeOverlay()`);
