@@ -1346,18 +1346,41 @@ async function main() {
       const before = texts();
       const trap = window.Mousetrap;
       if (!trap) return { skip: 'no mousetrap' };
+      // reset() 会真的清空游戏自己的绑定、unbind() 会原地改写同一个表，测完必须按内容装回去
+      const copyTable = table => {
+        const out = {};
+        for (const key of Object.keys(table ?? {})) out[key] = Array.isArray(table[key]) ? [...table[key]] : table[key];
+        return out;
+      };
+      const savedCallbacks = copyTable(trap._callbacks);
+      const savedDirectMap = copyTable(trap._directMap);
+      const savedBindings = (window.__DoLHKEarly?.bindings ?? []).map(b => ({ ...b, combos: [...b.combos] }));
+
       trap.unbind('n');
       redetect();
       const afterUnbind = texts();
       trap.reset();
       redetect();
       const afterReset = texts();
-      return { before, afterUnbind, afterReset };
+
+      trap._callbacks = {};
+      for (const key of Object.keys(savedCallbacks)) trap._callbacks[key] = savedCallbacks[key];
+      trap._directMap = {};
+      for (const key of Object.keys(savedDirectMap)) trap._directMap[key] = savedDirectMap[key];
+      if (window.__DoLHKEarly) window.__DoLHKEarly.bindings = savedBindings;
+      redetect();
+      const restored = texts();
+      return { before, afterUnbind, afterReset, restored };
     })()`);
     check(
       'L9 vanilla list follows Mousetrap unbind and reset',
       !vanillaRefresh.skip && vanillaRefresh.before !== vanillaRefresh.afterUnbind && vanillaRefresh.afterUnbind !== vanillaRefresh.afterReset,
       JSON.stringify({ before: vanillaRefresh.before?.slice(0, 60), afterUnbind: vanillaRefresh.afterUnbind?.slice(0, 60) }),
+    );
+    check(
+      'L9 mousetrap state restored after the probe',
+      vanillaRefresh.skip || vanillaRefresh.restored === vanillaRefresh.before,
+      JSON.stringify({ before: vanillaRefresh.before?.slice(0, 80), restored: vanillaRefresh.restored?.slice(0, 80) }),
     );
 
     const hotkeyErrors = cdp.errors.filter(text => /dol-hotkeys|hotkeys\.js|hotkeys-early\.js/.test(text));
