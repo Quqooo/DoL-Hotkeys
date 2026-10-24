@@ -1,4 +1,4 @@
-import { MAX_CHORD_ATOMS, mouseButtonOf } from '../core/keys';
+import { isMouseAtom, MAX_CHORD_ATOMS } from '../core/keys';
 import type { Bind } from '../core/types';
 
 /** 组合静默超时（毫秒），超时后结束录制 */
@@ -68,6 +68,7 @@ function press(code: string, repeat: boolean, hasModifier: boolean): boolean {
 
   if (held.has(code)) return true;
   if (state.atoms.length >= MAX_CHORD_ATOMS) return true;
+  // 已录过的键再次按下时不追加：重复原子会让整个组合判为非法
   if (state.atoms.includes(code)) return true;
 
   state.atoms.push(code);
@@ -99,7 +100,7 @@ export function captureKeyUp(e: KeyboardEvent): boolean {
 
 export function captureMouseDown(e: MouseEvent): boolean {
   const code = `Mouse${e.button}`;
-  if (mouseButtonOf([code]) === null) return false;
+  if (!isMouseAtom(code)) return false;
   return press(code, false, hasModifierOf(e));
 }
 

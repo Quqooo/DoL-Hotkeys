@@ -15,8 +15,24 @@ const STATIC: ReservedBind[] = [
 
 const warned = new Set<string>();
 
-/** 原版绑定表：静态项 + 运行时观测到的 Mousetrap 绑定 */
+let cacheSignature = '';
+let cached: ReservedBind[] = [];
+
+/** 观测快照的指纹：内容变化（含解绑后重新绑定）都会改变它 */
+function signature(): string {
+  const bindings = window.__DoLHKEarly?.bindings ?? [];
+  return bindings.map(binding => binding.combos.join(',')).join(';');
+}
+
+/**
+ * 原版绑定表：静态项 + 运行时观测到的 Mousetrap 绑定。
+ * 面板逐行判冲突会反复取表，按观测指纹缓存，避免重复解析组合串。
+ */
 export function reservedBinds(): ReservedBind[] {
+  const sig = signature();
+  if (sig === cacheSignature) return cached;
+  cacheSignature = sig;
+
   const out = [...STATIC];
   const seen = new Set(out.map(item => item.key));
   for (const binding of window.__DoLHKEarly?.bindings ?? []) {
@@ -29,14 +45,14 @@ export function reservedBinds(): ReservedBind[] {
       out.push({ key, label: { zh: `原版「${combo}」`, en: `vanilla "${combo}"` } });
     }
   }
-  return out;
+  cached = out;
+  return cached;
 }
 
 export function clashOf(bind: Bind): ReservedBind | undefined {
   const key = bindKey(bind);
   return reservedBinds().find(item => item.key === key);
 }
-
 export function labelOfReserved(item: ReservedBind, lang: Lang): string {
   return item.label[lang];
 }

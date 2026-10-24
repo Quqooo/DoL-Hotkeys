@@ -7,7 +7,7 @@ import {
 } from './capture';
 import { dispatch } from './dispatch';
 import { gameVariables } from '../host/game';
-import { modifierFamily, mouseButtonOf } from '../core/keys';
+import { isMouseAtom, modifierFamily, mouseAtomPressed } from '../core/keys';
 import type { Bind } from '../core/types';
 
 const NON_TEXT_INPUTS = new Set(['radio', 'button', 'checkbox', 'submit', 'reset', 'image', 'range', 'color', 'file']);
@@ -42,17 +42,9 @@ function removeAtom(code: string): void {
   if (index >= 0) held.splice(index, 1);
 }
 
-/** MouseEvent.button 到 buttons 位掩码的映射；中键为 4，右键为 2 */
-const MOUSE_BUTTON_BITS: Record<number, number> = { 0: 1, 1: 4, 2: 2, 3: 8, 4: 16 };
-
 /** 依据 buttons 掩码校正鼠标原子：覆盖层替换 DOM 时 mouseup 可能丢失，残留原子会导致后续组合无法匹配 */
 function trimMouseAtoms(mask: number): void {
-  held = held.filter(atom => {
-    const button = mouseButtonOf([atom]);
-    if (button === null) return true;
-    const bit = MOUSE_BUTTON_BITS[button] ?? 0;
-    return (mask & bit) !== 0;
-  });
+  held = held.filter(atom => mouseAtomPressed(atom, mask));
 }
 
 /** 依据修饰键标志校正修饰原子，处理丢失的 keyup */
@@ -97,7 +89,7 @@ function onKeyUp(e: KeyboardEvent): void {
 
 function onMouseDown(e: MouseEvent): void {
   const code = `Mouse${e.button}`;
-  if (mouseButtonOf([code]) === null) return;
+  if (!isMouseAtom(code)) return;
   if (isCapturing()) {
     if (captureMouseDown(e)) {
       e.preventDefault();
@@ -115,7 +107,7 @@ function onMouseDown(e: MouseEvent): void {
 
 function onMouseUp(e: MouseEvent): void {
   const code = `Mouse${e.button}`;
-  if (mouseButtonOf([code]) === null) return;
+  if (!isMouseAtom(code)) return;
   if (claimed.has(e.button)) e.preventDefault();
   if (isCapturing()) captureMouseUp(e);
   removeAtom(code);

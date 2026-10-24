@@ -1,6 +1,6 @@
 import { bindKey } from '../core/keys';
-import { list as listEntries, revision as registryRevision } from '../data/registry';
-import { conflictMode, getConfig, revision as settingsRevision } from '../core/settings';
+import { bindOf, isUsable, list as listEntries, revision as registryRevision } from '../data/registry';
+import { conflictMode, revision as settingsRevision } from '../core/settings';
 import { ACTION_ORDER, type ActionId, type Bind, type RegisteredHotkey } from '../core/types';
 
 interface Candidate {
@@ -13,12 +13,6 @@ const reported = new Set<string>();
 let cacheKey = '';
 let table = new Map<string, Candidate[]>();
 
-/** 空数组表示用户显式清空，不能回退到默认键 */
-function bindOf(entry: RegisteredHotkey): Bind {
-  const stored = getConfig().binds[entry.id];
-  return stored ?? entry.defaultBind;
-}
-
 function build(): void {
   const key = `${registryRevision()}:${settingsRevision()}`;
   if (key === cacheKey) return;
@@ -26,7 +20,7 @@ function build(): void {
 
   table = new Map();
   for (const entry of listEntries()) {
-    const candidate: Candidate = { entry, bind: bindOf(entry) };
+    const candidate: Candidate = { entry, bind: bindOf(entry.id) };
     const id = bindKey(candidate.bind);
     const bucket = table.get(id);
     if (bucket) bucket.push(candidate);
@@ -46,21 +40,13 @@ function byPriority(a: Candidate, b: Candidate): number {
   return rankOf(a.entry) - rankOf(b.entry);
 }
 
-function isAvailable(entry: RegisteredHotkey): boolean {
-  try {
-    return entry.available() !== false;
-  } catch {
-    return false;
-  }
-}
-
 function select(held: Bind, inputBlocked: boolean): Candidate[] {
   build();
   const matches = table.get(bindKey(held));
   if (!matches || matches.length === 0) return [];
   const usable = matches.filter(item => {
     if (inputBlocked && !item.entry.inInput) return false;
-    return isAvailable(item.entry);
+    return isUsable(item.entry);
   });
   return usable.sort(byPriority);
 }
@@ -88,7 +74,10 @@ export function dispatch(held: Bind, event: Event, inputBlocked = false): string
 
   // legacy 忽略 priority，按「内置 ACTION_ORDER → 第三方注册顺序」取首个
   if (mode === 'legacy') {
-    const chosen = [...matches].sort((a, b) => rankOf(a.entry) - rankOf(b.entry))[0];
+    let chosen = matches[0];
+    for (const item of matches) {
+      if (rankOf(item.entry) < rankOf(chosen.entry)) chosen = item;
+    }
     run(chosen, event);
     return chosen.entry.id;
   }

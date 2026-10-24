@@ -68,18 +68,14 @@ function migrateV1ToV2(rawBinds: Record<string, unknown>): void {
   }
 }
 
-/** v2→v3：旧编码解析为 Bind，不改变既有键位含义 */
-function migrateV2ToV3(rawBinds: Record<string, unknown>, target: Config): void {
+/** 逐条解析：解析失败的条目保持默认值，不因一条非法数据丢弃其余配置 */
+function readBinds(
+  rawBinds: Record<string, unknown>,
+  target: Config,
+  parse: (value: unknown) => Bind | null,
+): void {
   for (const [id, value] of Object.entries(rawBinds)) {
-    const bind = bindFromLegacySteps(value);
-    if (bind) target.binds[id] = bind;
-  }
-}
-
-
-function readV3Binds(rawBinds: Record<string, unknown>, target: Config): void {
-  for (const [id, value] of Object.entries(rawBinds)) {
-    const bind = normalizeBind(value);
+    const bind = parse(value);
     if (bind) target.binds[id] = bind;
   }
 }
@@ -98,31 +94,7 @@ export function getConfig(): Config {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Record<string, unknown>;
-      if (parsed && typeof parsed === 'object') {
-        const version = typeof parsed.v === 'number' ? parsed.v : 1;
-        const lang = parsed.lang;
-        if (lang === 'auto' || lang === 'zh' || lang === 'en') config.lang = lang as LangMode;
-        if (typeof parsed.volumeKeys === 'boolean') config.volumeKeys = parsed.volumeKeys;
-        if (typeof parsed.volumeInvert === 'boolean') config.volumeInvert = parsed.volumeInvert;
-        if (CONFLICT_MODES.includes(parsed.conflictMode as ConflictMode)) {
-          config.conflictMode = parsed.conflictMode as ConflictMode;
-        }
-        readExternal(parsed.external, config);
-
-        const rawBinds =
-          parsed.binds && typeof parsed.binds === 'object' ? (parsed.binds as Record<string, unknown>) : {};
-
-        if (version < 2) {
-          migrateV1ToV2(rawBinds);
-          needsSave = true;
-        }
-        if (version < 3) {
-          migrateV2ToV3(rawBinds, config);
-          needsSave = true;
-        } else {
-          readV3Binds(rawBinds, config);
-        }
-      }
+      if (parsed && typeof parsed === 'object') needsSave = applyStored(parsed, config);
     }
   } catch {
     /* 无法读取时使用默认值 */
@@ -132,6 +104,28 @@ export function getConfig(): Config {
   return config;
 }
 
+/** 把已存储的内容读进 config；返回是否需要回写（发生过迁移） */
+function applyStored(parsed: Record<string, unknown>, config: Config): boolean {
+  const version = typeof parsed.v === 'number' ? parsed.v : 1;
+  const lang = parsed.lang;
+  if (lang === 'auto' || lang === 'zh' || lang === 'en') config.lang = lang as LangMode;
+  if (typeof parsed.volumeKeys === 'boolean') config.volumeKeys = parsed.volumeKeys;
+  if (typeof parsed.volumeInvert === 'boolean') config.volumeInvert = parsed.volumeInvert;
+  if (CONFLICT_MODES.includes(parsed.conflictMode as ConflictMode)) {
+    config.conflictMode = parsed.conflictMode as ConflictMode;
+  }
+  readExternal(parsed.external, config);
+
+  const rawBinds = parsed.binds && typeof parsed.binds === 'object' ? (parsed.binds as Record<string, unknown>) : {};
+  if (version >= 3) {
+    readBinds(rawBinds, config, normalizeBind);
+    return false;
+  }
+  if (version < 2) migrateV1ToV2(rawBinds);
+  readBinds(rawBinds, config, bindFromLegacySteps);
+  return true;
+}
+
 export function saveConfig(): void {
   if (!cache) return;
   try {
@@ -139,11 +133,6 @@ export function saveConfig(): void {
   } catch {
     /* 存储不可用时仅保留内存配置 */
   }
-}
-
-export function getBind(id: string): Bind | null {
-  const bind = getConfig().binds[id];
-  return bind ? [...bind] : null;
 }
 
 export function revision(): number {

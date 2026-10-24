@@ -12,6 +12,47 @@ function volumeModeOf(config: Config): VolumeMode {
   return config.volumeInvert ? 'invert' : 'on';
 }
 
+interface RadioSpec<T extends string> {
+  name: string;
+  options: Array<[T, string]>;
+  disabled?: boolean;
+  /** 当前选中项；返回 null 表示全不选 */
+  current: () => T | null;
+  onPick: (value: T) => void;
+}
+
+/**
+ * 单选组：分隔符沿用原版的纯文本 ` | `，不用样式元素。
+ * 每个选项在 change 时回调，回调内需要回滚就调用返回的 sync。
+ */
+function radioRow<T extends string>(spec: RadioSpec<T>): { group: HTMLElement; sync: () => void } {
+  const group = div('dolhk-radios');
+  const inputs: HTMLInputElement[] = [];
+
+  const sync = (): void => {
+    const active = spec.current();
+    for (const input of inputs) input.checked = input.value === active;
+  };
+
+  for (const [value, label] of spec.options) {
+    if (inputs.length > 0) group.append(document.createTextNode(' | '));
+    const wrap = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = spec.name;
+    input.value = value;
+    input.disabled = spec.disabled === true;
+    input.addEventListener('change', () => {
+      if (input.checked) spec.onPick(value);
+    });
+    inputs.push(input);
+    wrap.append(input, document.createTextNode(` ${label}`));
+    group.append(wrap);
+  }
+  sync();
+  return { group, sync };
+}
+
 export function buildLanguage(config: Config, remount: () => void): HTMLElement {
   const s = t();
   const item = div('settingsToggleItem dolhk-row');
@@ -49,14 +90,6 @@ export function buildVolume(config: Config): HTMLElement {
   const head = div('dolhk-volume-head');
   head.append(span('gold', s.volume), span('dolhk-muted', supported ? s.volumeOn : s.volumeUnsupported));
 
-  const group = div('dolhk-radios');
-  const inputs: HTMLInputElement[] = [];
-
-  const sync = (): void => {
-    const mode = volumeModeOf(config);
-    for (const input of inputs) input.checked = input.value === mode;
-  };
-
   const commit = (mode: VolumeMode): void => {
     config.volumeKeys = mode !== 'off';
     config.volumeInvert = mode === 'invert';
@@ -64,41 +97,27 @@ export function buildVolume(config: Config): HTMLElement {
     if (supported) applyVolumeOverride(config.volumeKeys);
   };
 
-  const choose = (mode: VolumeMode): void => {
-    if (mode !== 'off' && !config.volumeKeys) {
-      void confirmDialog(s.volumeConfirm, s.confirmOk, s.confirmCancel, s.confirmTitle).then(ok => {
-        if (!ok) {
-          sync();
-          return;
-        }
+  const { group, sync } = radioRow<VolumeMode>({
+    name: 'dolhk-volume',
+    disabled: !supported,
+    current: () => volumeModeOf(config),
+    options: [
+      ['off', s.volumeOff],
+      ['on', s.volumeEnabled],
+      ['invert', s.volumeInvert],
+    ],
+    onPick: mode => {
+      if (mode === 'off' || config.volumeKeys) {
         commit(mode);
+        return;
+      }
+      // 首次开启会让音量键不再调节音量，先征求确认；取消则回滚选中态
+      void confirmDialog(s.volumeConfirm, s.confirmOk, s.confirmCancel, s.confirmTitle).then(ok => {
+        if (ok) commit(mode);
+        else sync();
       });
-      return;
-    }
-    commit(mode);
-  };
-
-  const options: Array<[VolumeMode, string]> = [
-    ['off', s.volumeOff],
-    ['on', s.volumeEnabled],
-    ['invert', s.volumeInvert],
-  ];
-  for (const [mode, label] of options) {
-    if (inputs.length > 0) group.append(document.createTextNode(' | '));
-    const wrap = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'dolhk-volume';
-    input.value = mode;
-    input.disabled = !supported;
-    input.addEventListener('change', () => {
-      if (input.checked) choose(mode);
-    });
-    inputs.push(input);
-    wrap.append(input, document.createTextNode(` ${label}`));
-    group.append(wrap);
-  }
-  sync();
+    },
+  });
 
   column.append(head, group);
   item.append(column);
@@ -112,37 +131,21 @@ export function buildConflict(config: Config, repaint: () => void): HTMLElement 
   const head = div('dolhk-volume-head');
   head.append(span('gold', s.conflict), span('dolhk-muted', s.conflictHint));
 
-  const group = div('dolhk-radios');
-  const inputs: HTMLInputElement[] = [];
-  const options: Array<[ConflictMode, string]> = [
-    ['legacy', s.modeLegacy],
-    ['all', s.modeAll],
-    ['first', s.modeFirst],
-  ];
-
-  const sync = (): void => {
-    for (const input of inputs) input.checked = input.value === config.conflictMode;
-  };
-
-  for (const [mode, label] of options) {
-    if (inputs.length > 0) group.append(document.createTextNode(' | '));
-    const wrap = document.createElement('label');
-    const input = document.createElement('input');
-    input.type = 'radio';
-    input.name = 'dolhk-conflict';
-    input.value = mode;
-    input.addEventListener('change', () => {
-      if (!input.checked) return;
+  const { group } = radioRow<ConflictMode>({
+    name: 'dolhk-conflict',
+    current: () => config.conflictMode,
+    options: [
+      ['legacy', s.modeLegacy],
+      ['all', s.modeAll],
+      ['first', s.modeFirst],
+    ],
+    onPick: mode => {
       config.conflictMode = mode;
       saveConfig();
       setConflictMode(mode);
       repaint();
-    });
-    inputs.push(input);
-    wrap.append(input, document.createTextNode(` ${label}`));
-    group.append(wrap);
-  }
-  sync();
+    },
+  });
 
   column.append(head, group);
   item.append(column);

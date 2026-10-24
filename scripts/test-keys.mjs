@@ -61,11 +61,12 @@ eq('normalize empty rejected', k.normalizeBind([]), null);
 eq('normalize too long rejected', k.normalizeBind(new Array(9).fill('KeyA').map((v, i) => `${v}${i}`)), null);
 eq('normalize mouse ok', k.normalizeBind(['ControlLeft', 'Mouse3']), ['ControlLeft', 'Mouse3']);
 
-// 匹配语义
-ok('modifier family equal', k.sameBind(['ControlLeft', 'KeyA'], ['ControlRight', 'KeyA']));
-ok('order matters', !k.sameBind(['ControlLeft', 'KeyA'], ['KeyA', 'ControlLeft']));
-ok('length matters', !k.sameBind(['ControlLeft'], ['ControlLeft', 'KeyA']));
-ok('mouse vs key distinct', !k.sameBind(['Mouse1'], ['Mouse3']));
+// 匹配语义：bindKey 是唯一判等依据，修饰键按族归并、顺序保留
+const sameBind = (a, b) => k.bindKey(a) === k.bindKey(b);
+ok('modifier family equal', sameBind(['ControlLeft', 'KeyA'], ['ControlRight', 'KeyA']));
+ok('order matters', !sameBind(['ControlLeft', 'KeyA'], ['KeyA', 'ControlLeft']));
+ok('length matters', !sameBind(['ControlLeft'], ['ControlLeft', 'KeyA']));
+ok('mouse vs key distinct', !sameBind(['Mouse1'], ['Mouse3']));
 
 // 展示顺序即语义
 eq('label keeps order', k.bindLabel(['KeyX', 'ControlLeft', 'AltLeft', 'KeyA', 'KeyB']), 'X + Ctrl + Alt + A + B');

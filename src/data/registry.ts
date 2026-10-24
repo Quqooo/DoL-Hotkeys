@@ -1,5 +1,6 @@
 import { withDeclaration } from './decl';
 import { normalizeBind, parseMousetrap } from '../core/keys';
+import { getConfig } from '../core/settings';
 import { ACTION_ORDER, type ActionId, type Bind, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from '../core/types';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
@@ -142,4 +143,23 @@ export function groupOf(entry: RegisteredHotkey, lang: Lang): string | null {
   if (entry.group === undefined) return null;
   const text = resolveLabel(entry.group, entry.id, lang);
   return text === entry.id ? null : text.slice(0, MAX_LABEL);
+}
+
+/**
+ * 生效键位：用户改过则用用户值，否则回退注册时的默认键。
+ * 空数组属于"用户显式清空"，不能当作未设置再回退。
+ */
+export function bindOf(id: string): Bind {
+  const stored = getConfig().binds[id];
+  if (stored) return stored;
+  return entries.get(id)?.defaultBind ?? [];
+}
+
+/** available() 抛错视为不可用，避免一个条目的错误影响整批派发 */
+export function isUsable(entry: RegisteredHotkey): boolean {
+  try {
+    return entry.available() !== false;
+  } catch {
+    return false;
+  }
 }

@@ -1,6 +1,6 @@
 import { cancelCapture, isCapturing, startCapture } from '../../runtime/capture';
 import { bindHasDigit, bindKey, bindLabel, mouseButtonOf } from '../../core/keys';
-import { get as getEntry, labelOf, list as listRegistry } from '../../data/registry';
+import { bindOf, get as getEntry, isUsable, labelOf, list as listRegistry } from '../../data/registry';
 import { getConfig, resetBind, setBind } from '../../core/settings';
 import { clashOf, labelOfReserved } from '../../host/vanilla';
 import { currentLang, t } from '../i18n';
@@ -26,19 +26,39 @@ const BROWSER_RESERVED: Bind[] = [
 
 const warnSlots = new Map<string, HTMLElement>();
 
-/** 用户未改过时回退到注册时的默认键，第三方行才能显示与判重 */
-export function bindOf(id: string): Bind {
-  const stored = getConfig().binds[id];
-  if (stored) return stored;
-  return getEntry(id)?.defaultBind ?? [];
-}
-
 function setKeyText(target: HTMLButtonElement, bind: Bind): void {
   target.classList.toggle('dolhk-empty', bind.length === 0);
   target.textContent = bind.length ? bindLabel(bind) : t().empty;
 }
 
-function paintWarnings(id: string, bind: Bind): void {
+const BROWSER_KEYS = new Set(BROWSER_RESERVED.map(bindKey));
+
+/** 键位指纹 → 占用它的前两个条目 id；整批建立一次，避免逐行重复扫描 */
+interface Occupancy {
+  byKey: Map<string, string[]>;
+}
+
+function occupancyOf(): Occupancy {
+  const byKey = new Map<string, string[]>();
+  for (const entry of listRegistry()) {
+    const key = bindKey(bindOf(entry.id));
+    if (!key || key === '') continue;
+    const list = byKey.get(key);
+    if (!list) byKey.set(key, [entry.id]);
+    else if (list.length < 2) list.push(entry.id);
+  }
+  return { byKey };
+}
+
+/** 取与自身不同的首个占用者：多数行只有一个占用者，命中即返回 */
+function duplicateOf(occupancy: Occupancy, key: string, self: string): string | null {
+  for (const id of occupancy.byKey.get(key) ?? []) {
+    if (id !== self) return id;
+  }
+  return null;
+}
+
+function paintWarnings(id: string, bind: Bind, occupancy: Occupancy): void {
   const slot = warnSlots.get(id);
   if (!slot) return;
   if (bind.length === 0) {
@@ -49,14 +69,15 @@ function paintWarnings(id: string, bind: Bind): void {
   const lang = currentLang();
   const messages: string[] = [];
   const key = bindKey(bind);
-  const duplicate = listRegistry().find(other => other.id !== id && bindKey(bindOf(other.id)) === key);
-  if (duplicate) {
+  const duplicateId = duplicateOf(occupancy, key, id);
+  if (duplicateId) {
+    const duplicate = getEntry(duplicateId);
     const mode = getConfig().conflictMode;
     const text = mode === 'all' ? s.warnDupAll : mode === 'first' ? s.warnDupFirst : s.warnDup;
-    messages.push(text(labelOf(duplicate, lang)));
+    if (duplicate) messages.push(text(labelOf(duplicate, lang)));
   }
   if (bindHasDigit(bind)) messages.push(s.warnDigit);
-  if (BROWSER_RESERVED.some(reserved => bindKey(reserved) === key)) messages.push(s.warnBrowser);
+  if (BROWSER_KEYS.has(key)) messages.push(s.warnBrowser);
   const side = mouseButtonOf(bind);
   if (side === 3 || side === 4) messages.push(s.warnSide);
   const reserved = clashOf(bind);
@@ -120,13 +141,7 @@ function buildRow(entry: RegisteredHotkey, repaint: () => void): HTMLElement {
   const badge = entry.builtin ? null : sourceBadge(entry.id);
   if (badge) head.append(span('dolhk-badge', badge));
 
-  const available = (() => {
-    try {
-      return entry.available() !== false;
-    } catch {
-      return false;
-    }
-  })();
+  const available = isUsable(entry);
   if (!available) head.append(span('dolhk-muted', s.unavailable));
 
   const warning = div('dolhk-warn');
@@ -159,9 +174,10 @@ export function buildSection(title: string, entries: RegisteredHotkey[], repaint
   return wrap;
 }
 
-/** 行重建后补画告警；`warnSlots` 由本模块独占 */
-export function repaintWarnings(ids: string[]): void {
-  for (const id of ids) paintWarnings(id, bindOf(id));
+/** 行重建后补画告警：只遍历已建出的行，`warnSlots` 由本模块独占 */
+export function repaintWarnings(): void {
+  const occupancy = occupancyOf();
+  for (const id of warnSlots.keys()) paintWarnings(id, bindOf(id), occupancy);
 }
 
 export function clearWarnings(): void {

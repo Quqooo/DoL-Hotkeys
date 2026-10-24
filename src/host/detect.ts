@@ -332,7 +332,6 @@ function detectModLoader(): OrigEntry | null {
 
 export interface DetectionResult {
   entries: OrigEntry[];
-  fullyDetected: boolean;
   partiallyDetected: boolean;
   usedSnapshot: boolean;
 }
@@ -351,7 +350,6 @@ export function detect(): DetectionResult {
   const detectedLayers = [engine.entries, mousetrap, loader].filter(Boolean).length;
   return {
     entries,
-    fullyDetected: detectedLayers === 3,
     partiallyDetected: detectedLayers > 0,
     usedSnapshot: usedSnapshot || nothingDetected,
   };

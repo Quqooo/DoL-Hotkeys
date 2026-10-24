@@ -5,6 +5,9 @@ const MOUSE_CODE = /^Mouse(\d+)$/;
 
 const MOUSE_BUTTONS = new Set([1, 3, 4]);
 
+/** MouseEvent.button 到 buttons 位掩码的映射；中键为 4，右键为 2 */
+const MOUSE_BUTTON_BITS: Record<number, number> = { 0: 1, 1: 4, 2: 2, 3: 8, 4: 16 };
+
 /** 单个组合允许的最大原子数 */
 export const MAX_CHORD_ATOMS = 8;
 
@@ -173,10 +176,6 @@ const MOUSETRAP_KEYS: Record<string, string> = {
   '`': 'Backquote',
 };
 
-export function isModifierCode(code: string): boolean {
-  return MODIFIER_CODES.test(code);
-}
-
 export function modifierFamily(code: string): string | null {
   const match = MODIFIER_CODES.exec(code);
   return match ? match[1] : null;
@@ -191,26 +190,22 @@ export function mouseButtonOf(bind: Bind): number | null {
 export function isBindAtom(code: unknown): code is string {
   if (typeof code !== 'string' || !code) return false;
   if (MODIFIER_CODES.test(code)) return true;
-  if (MOUSE_CODES_HAS(code)) return true;
+  if (isMouseAtom(code)) return true;
   return KEY_CODES.has(code);
 }
 
-function MOUSE_CODES_HAS(code: string): boolean {
+/** 是否为受支持的鼠标原子（中键与两个侧键） */
+export function isMouseAtom(code: string): boolean {
   const match = MOUSE_CODE.exec(code);
   return Boolean(match && MOUSE_BUTTONS.has(Number(match[1])));
 }
 
-/** 修饰键按物理键族比较，使迁移后的左侧键绑定对右侧键同样有效 */
-export function sameAtom(a: string, b: string): boolean {
-  if (a === b) return true;
-  const fa = modifierFamily(a);
-  if (!fa) return false;
-  return fa === modifierFamily(b);
-}
-
-export function sameBind(a: Bind, b: Bind): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((atom, index) => sameAtom(atom, b[index]));
+/** 鼠标原子是否仍按在 `buttons` 掩码里；非鼠标原子一律返回 true */
+export function mouseAtomPressed(atom: string, buttons: number): boolean {
+  const match = MOUSE_CODE.exec(atom);
+  if (!match) return true;
+  const bit = MOUSE_BUTTON_BITS[Number(match[1])] ?? 0;
+  return (buttons & bit) !== 0;
 }
 
 export function normalizeBind(input: unknown): Bind | null {

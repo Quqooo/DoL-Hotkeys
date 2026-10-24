@@ -3,10 +3,11 @@ import { checkDeclarations } from './data/decl';
 import { install } from './runtime/engine';
 import { currentLang, setLangOverride, t } from './ui/i18n';
 import { applyVolumeOverride, installVolumeKeys } from './host/mobile';
-import { ensureTab, installTab, openPanel } from './ui/panel';
+import { ensureTab, installPanel, openPanel } from './ui/panel';
 import * as registry from './data/registry';
 import { clashOf, labelOfReserved, warnOnRegister } from './host/vanilla';
-import { getBind as storedBind, getConfig } from './core/settings';
+import { getConfig } from './core/settings';
+import type { Bind, HotkeyDefInput } from './core/types';
 
 let listenersInstalled = false;
 
@@ -19,19 +20,22 @@ function register(def: Parameters<typeof registry.register>[0]): boolean {
   return ok;
 }
 
+/** 队列里的条目来自第三方，可能完全非法；类型在此收窄，校验由注册表负责 */
+function registerRaw(def: unknown): boolean {
+  return register(def as HotkeyDefInput);
+}
+
 function drainQueue(): void {
   const queue = window.DoLHK_QUEUE;
   if (Array.isArray(queue)) {
-    for (const def of queue.splice(0)) register(def as never);
+    for (const def of queue.splice(0)) registerRaw(def);
   }
-  window.DoLHK_QUEUE = { push: (def: unknown) => register(def as never) } as never;
+  window.DoLHK_QUEUE = { push: registerRaw };
 }
 
-function getBind(id: string): string[] | null {
-  const stored = storedBind(id);
-  if (stored) return stored;
-  const entry = registry.get(id);
-  return entry ? [...entry.defaultBind] : null;
+/** 未注册的 id 返回 null，与"注册但键位为空"的 [] 区分 */
+function getBind(id: string): Bind | null {
+  return registry.get(id) ? [...registry.bindOf(id)] : null;
 }
 
 function overlayHost(): HTMLElement | null {
@@ -50,19 +54,14 @@ function init(): boolean {
     listenersInstalled = true;
   }
   if (!overlayHost()) return false;
-  installTab();
+  installPanel();
   return true;
 }
 
-/** 内置走动作表，第三方取注册时的 available()，未注册的一律视为不可用 */
+/** 未注册的 id 一律视为不可用 */
 function availableOf(id: string): boolean {
   const entry = registry.get(id);
-  if (!entry) return false;
-  try {
-    return entry.available() !== false;
-  } catch {
-    return false;
-  }
+  return entry ? registry.isUsable(entry) : false;
 }
 
 window.DoLHK = {
