@@ -1,4 +1,3 @@
-import { isAvailable } from './actions';
 import { installBuiltins } from './builtins';
 import { checkDeclarations } from './decl';
 import { install } from './engine';
@@ -55,6 +54,17 @@ function init(): boolean {
   return true;
 }
 
+/** 内置走动作表，第三方取注册时的 available()，未注册的一律视为不可用 */
+function availableOf(id: string): boolean {
+  const entry = registry.get(id);
+  if (!entry) return false;
+  try {
+    return entry.available() !== false;
+  } catch {
+    return false;
+  }
+}
+
 window.DoLHK = {
   api: 1,
   version: __DOLHK_VERSION__,
@@ -66,7 +76,7 @@ window.DoLHK = {
   get label(): string {
     return t().tab;
   },
-  available: (id: string) => isAvailable(id as never),
+  available: availableOf,
   refreshTab: ensureTab,
 };
 

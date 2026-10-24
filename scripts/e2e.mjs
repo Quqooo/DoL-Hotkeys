@@ -771,6 +771,21 @@ async function main() {
       JSON.stringify({ removed: api.removed, after: api.after, badId: api.badId }),
     );
 
+    const availability = await cdp.evaluate(`(() => {
+      const api = window.DoLHK;
+      api.register({ id: 'e2e.off', defaultBind: ['AltLeft', 'KeyN'], handler: () => {}, available: () => false });
+      const off = api.available('e2e.off');
+      const missing = api.available('e2e.missing');
+      const builtin = api.available('options');
+      api.unregister('e2e.off');
+      return { off, missing, builtin, afterUnregister: api.available('e2e.off') };
+    })()`);
+    check(
+      'L21 available() reports the registered predicate and rejects unknown ids',
+      availability.off === false && availability.missing === false && availability.builtin === true && availability.afterUnregister === false,
+      JSON.stringify(availability),
+    );
+
     const panelRows = await cdp.evaluate(`(() => {
       const api = window.DoLHK;
       const make = (id, group, bind) => ({ id, group, defaultBind: bind, label: id, handler: () => {} });

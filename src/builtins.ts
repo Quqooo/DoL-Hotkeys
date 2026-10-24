@@ -1,4 +1,4 @@
-import { runAction } from './actions';
+import { isAvailable, runAction } from './actions';
 import { dictFor } from './i18n';
 import { registerBuiltin } from './registry';
 import { DEFAULT_BINDS } from './settings';
@@ -10,6 +10,7 @@ export function installBuiltins(): void {
       id,
       label: lang => dictFor(lang).names[id],
       defaultBind: DEFAULT_BINDS[id],
+      available: () => isAvailable(id),
       handler: () => runAction(id),
     });
   }
