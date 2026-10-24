@@ -1,11 +1,27 @@
 import { isAvailable } from './actions';
 import { install } from './engine';
-import { setLangOverride, t } from './i18n';
+import { currentLang, setLangOverride, t } from './i18n';
 import { applyVolumeOverride, installVolumeKeys } from './mobile';
-import { ensureTab, installTab } from './panel';
-import { getConfig } from './settings';
+import { ensureTab, installTab, openPanel } from './panel';
+import * as registry from './registry';
+import { getBind as storedBind, getConfig } from './settings';
 
 let listenersInstalled = false;
+
+function drainQueue(): void {
+  const queue = window.DoLHK_QUEUE;
+  if (Array.isArray(queue)) {
+    for (const def of queue.splice(0)) registry.register(def as never);
+  }
+  window.DoLHK_QUEUE = { push: (def: unknown) => registry.register(def as never) } as never;
+}
+
+function getBind(id: string): string[] | null {
+  const stored = storedBind(id);
+  if (stored) return stored;
+  const entry = registry.get(id);
+  return entry ? [...entry.defaultBind] : null;
+}
 
 function overlayHost(): HTMLElement | null {
   return document.getElementById('customOverlay') ?? document.getElementById('customOverlayTitle');
@@ -28,12 +44,21 @@ function init(): boolean {
 }
 
 window.DoLHK = {
+  api: 1,
+  version: __DOLHK_VERSION__,
+  register: registry.register,
+  unregister: registry.unregister,
+  getBind,
+  openPanel,
+  lang: currentLang,
   get label(): string {
     return t().tab;
   },
   available: (id: string) => isAvailable(id as never),
   refreshTab: ensureTab,
 };
+
+drainQueue();
 
 function boot(): void {
   let attempts = 0;

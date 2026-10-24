@@ -33,6 +33,7 @@ const shared = {
   charset: 'utf8',
   logLevel: 'info',
   banner: { js: `/* DoL Hotkeys ${VERSION} */` },
+  define: { __DOLHK_VERSION__: JSON.stringify(VERSION) },
 };
 
 await rm(dist, { recursive: true, force: true });

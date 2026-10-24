@@ -8,7 +8,7 @@
     "pack": "node scripts/build.mjs && node scripts/pack.mjs",
     "typecheck": "tsc --noEmit",
     "test:e2e": "node scripts/e2e.mjs",
-    "test": "node scripts/test-keys.mjs"
+    "test": "node scripts/test-keys.mjs && node scripts/test-registry.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.9",

@@ -55,6 +55,37 @@ export type Bind = string[];
 
 export type ConflictMode = 'legacy' | 'all' | 'first';
 
+export type LocalizedText = string | { zh?: string; en?: string } | ((lang: Lang) => string);
+
+export interface HotkeyContext {
+  id: string;
+  event: Event;
+  source: 'key' | 'mouse';
+}
+
+export interface HotkeyDefInput {
+  id: string;
+  handler: (ctx: HotkeyContext) => void;
+  label?: LocalizedText;
+  /** 结构化 Bind，或可无歧义解析的 Mousetrap 单组合串 */
+  defaultBind?: Bind | string;
+  group?: LocalizedText;
+  available?: () => boolean;
+  priority?: number;
+  inInput?: boolean;
+}
+
+export interface RegisteredHotkey {
+  id: string;
+  handler: (ctx: HotkeyContext) => void;
+  label: LocalizedText;
+  defaultBind: Bind;
+  group?: LocalizedText;
+  available: () => boolean;
+  priority: number;
+  inInput: boolean;
+}
+
 export interface Config {
   v: number;
   lang: LangMode;

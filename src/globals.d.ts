@@ -1,3 +1,5 @@
+import type { Bind, HotkeyDefInput, Lang } from './types';
+
 export interface EarlyBinding {
   keys: string;
   /** 该条目的原始组合串，用于按组合解除绑定 */
@@ -12,6 +14,8 @@ export interface EarlyRegistry {
 }
 
 declare global {
+  const __DOLHK_VERSION__: string;
+
   interface Window {
     SugarCube: any;
     Engine?: any;
@@ -36,10 +40,18 @@ declare global {
     cordova?: any;
     __DoLHKEarly?: EarlyRegistry;
     DoLHK?: {
+      readonly api: number;
+      readonly version: string;
+      register: (def: HotkeyDefInput) => boolean;
+      unregister: (id: string) => boolean;
+      getBind: (id: string) => Bind | null;
+      openPanel: () => void;
+      lang: () => Lang;
       readonly label: string;
       available: (id: string) => boolean;
       refreshTab: () => void;
     };
+    DoLHK_QUEUE?: unknown[] | { push: (def: unknown) => unknown };
   }
 }
 

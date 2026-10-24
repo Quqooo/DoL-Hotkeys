@@ -169,6 +169,26 @@ export function installTab(): void {
   ensureTab();
 }
 
+/** 打开设置覆盖层并切到本模组分页 */
+export function openPanel(): void {
+  const overlay = document.getElementById('customOverlay');
+  if (overlay?.getAttribute('data-overlay') !== 'options') {
+    window.wikifier?.('overlayReplace', '"options"');
+  }
+  let attempts = 0;
+  const focus = (): void => {
+    ensureTab();
+    const tab = document.querySelector<HTMLButtonElement>('#overlayTabs button[data-dolhk-tab]');
+    if (tab) {
+      tab.click();
+      return;
+    }
+    attempts++;
+    if (attempts < 20) setTimeout(focus, 50);
+  };
+  focus();
+}
+
 function setKeyText(target: HTMLButtonElement, bind: Bind): void {
   target.classList.toggle('dolhk-empty', bind.length === 0);
   target.textContent = bind.length ? bindLabel(bind) : t().empty;

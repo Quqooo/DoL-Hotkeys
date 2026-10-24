@@ -726,6 +726,43 @@ async function main() {
       JSON.stringify(defaultKeys),
     );
 
+    const api = await cdp.evaluate(`(() => {
+      const api = window.DoLHK;
+      const def = {
+        id: 'e2e.probe',
+        label: { zh: '探针', en: 'Probe' },
+        defaultBind: 'alt+q',
+        handler: () => {},
+      };
+      const first = api.register(def);
+      const dup = api.register(def);
+      const bind = api.getBind('e2e.probe');
+      const removed = api.unregister('e2e.probe');
+      const after = api.getBind('e2e.probe');
+      return {
+        api: api.api,
+        version: api.version,
+        lang: api.lang(),
+        first,
+        dup,
+        bind,
+        removed,
+        after,
+        badId: api.register({ id: 'nodot', defaultBind: ['KeyA'], handler: () => {} }),
+      };
+    })()`);
+    check('L21 public api exposes version and language', api.api === 1 && /^\d+\.\d+\.\d+$/.test(api.version) && ['zh', 'en'].includes(api.lang), JSON.stringify({ api: api.api, version: api.version, lang: api.lang }));
+    check(
+      'L21 register normalizes a Mousetrap bind and rejects duplicates',
+      api.first === true && api.dup === false && JSON.stringify(api.bind) === '["AltLeft","KeyQ"]',
+      JSON.stringify({ first: api.first, dup: api.dup, bind: api.bind }),
+    );
+    check(
+      'L21 unregister removes the entry and invalid ids are rejected',
+      api.removed === true && api.after === null && api.badId === false,
+      JSON.stringify({ removed: api.removed, after: api.after, badId: api.badId }),
+    );
+
     const columns = await cdp.evaluate(`(() => {
       const read = sel => getComputedStyle(document.querySelector(sel)).gridTemplateColumns.split(' ').length;
       return { list: read('.dolhk-list'), orig: read('.dolhk-orig'), width: document.getElementById('customOverlayContent').clientWidth };
