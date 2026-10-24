@@ -112,8 +112,8 @@ const LABELS: Record<string, string> = {
   MetaLeft: 'Meta',
   MetaRight: 'R Meta',
   Mouse1: 'Middle',
-  Mouse3: 'Back',
-  Mouse4: 'Forward',
+  Mouse3: 'Side 1',
+  Mouse4: 'Side 2',
 };
 
 /** 迁移统一取左侧键 */

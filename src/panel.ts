@@ -2,11 +2,20 @@ import { cancelCapture, isCapturing, startCapture } from './capture';
 import { detect } from './detect';
 import { confirmDialog } from './dialog';
 import { stateTemp } from './game';
-import { invalidateLang, setLangOverride, t } from './i18n';
-import { bindHasDigit, bindLabel, mouseButtonOf, sameBind } from './keys';
+import { currentLang, invalidateLang, setLangOverride, t } from './i18n';
+import { bindHasDigit, bindKey, bindLabel, mouseButtonOf } from './keys';
 import { applyVolumeOverride, hasCordova } from './mobile';
-import { getConfig, resetBind, saveConfig, setBind } from './settings';
-import { ACTION_ORDER, type ActionId, type Bind, type LangMode, type OrigEntry } from './types';
+import { get as getEntry, groupOf, labelOf, list as listRegistry, subscribe as subscribeRegistry } from './registry';
+import { getConfig, resetBind, saveConfig, setBind, setConflictMode } from './settings';
+import {
+  ACTION_ORDER,
+  type ActionId,
+  type Bind,
+  type ConflictMode,
+  type LangMode,
+  type OrigEntry,
+  type RegisteredHotkey,
+} from './types';
 
 const BROWSER_RESERVED: Bind[] = [
   ['ControlLeft', 'KeyS'],
@@ -29,7 +38,7 @@ let rootEl: HTMLElement | null = null;
 let listEl: HTMLElement | null = null;
 let sourceEl: HTMLElement | null = null;
 let originalEl: HTMLElement | null = null;
-const warnSlots = new Map<ActionId, HTMLElement>();
+const warnSlots = new Map<string, HTMLElement>();
 
 function div(className: string, text?: string): HTMLDivElement {
   const node = document.createElement('div');
@@ -194,32 +203,42 @@ function setKeyText(target: HTMLButtonElement, bind: Bind): void {
   target.textContent = bind.length ? bindLabel(bind) : t().empty;
 }
 
-function paintWarnings(action: ActionId): void {
-  const slot = warnSlots.get(action);
+/** 用户未改过时回退到注册时的默认键，第三方行才能显示与判重 */
+function bindOf(id: string): Bind {
+  const stored = getConfig().binds[id];
+  if (stored) return stored;
+  return getEntry(id)?.defaultBind ?? [];
+}
+
+function paintWarnings(id: string, bind: Bind): void {
+  const slot = warnSlots.get(id);
   if (!slot) return;
-  const s = t();
-  const config = getConfig();
-  const bind = config.binds[action] ?? [];
   if (bind.length === 0) {
     slot.textContent = '';
     return;
   }
+  const s = t();
+  const lang = currentLang();
   const messages: string[] = [];
-  const earlier = ACTION_ORDER.slice(0, ACTION_ORDER.indexOf(action));
-  const duplicate = earlier.find(other => sameBind(config.binds[other] ?? [], bind));
-  if (duplicate) messages.push(s.warnDup(s.names[duplicate]));
+  const key = bindKey(bind);
+  const duplicate = listRegistry().find(other => other.id !== id && bindKey(bindOf(other.id)) === key);
+  if (duplicate) {
+    const mode = getConfig().conflictMode;
+    const text = mode === 'all' ? s.warnDupAll : mode === 'first' ? s.warnDupFirst : s.warnDup;
+    messages.push(text(labelOf(duplicate, lang)));
+  }
   if (bindHasDigit(bind)) messages.push(s.warnDigit);
-  if (BROWSER_RESERVED.some(reserved => sameBind(reserved, bind))) messages.push(s.warnBrowser);
+  if (BROWSER_RESERVED.some(reserved => bindKey(reserved) === key)) messages.push(s.warnBrowser);
   const button = mouseButtonOf(bind);
   if (button === 3 || button === 4) messages.push(s.warnSide);
-  if (sameBind(['AltLeft', 'KeyM'], bind)) messages.push(s.warnModLoader);
+  if (key === bindKey(['AltLeft', 'KeyM'])) messages.push(s.warnModLoader);
   slot.textContent = messages.join(' · ');
 }
 
-function beginCapture(action: ActionId, target: HTMLButtonElement): void {
+function beginCapture(id: string, target: HTMLButtonElement): void {
   if (isCapturing()) cancelCapture();
   const s = t();
-  const original = [...(getConfig().binds[action] ?? [])];
+  const original = [...bindOf(id)];
   target.classList.remove('dolhk-empty');
   target.classList.add('dolhk-capturing');
   target.textContent = s.pressCombo;
@@ -242,7 +261,7 @@ function beginCapture(action: ActionId, target: HTMLButtonElement): void {
         setKeyText(target, original);
         return;
       }
-      setBind(action, atoms);
+      setBind(id, atoms);
       paintRows();
     },
   );
@@ -256,37 +275,91 @@ function beginCapture(action: ActionId, target: HTMLButtonElement): void {
   }, 0);
 }
 
-function buildRow(action: ActionId): HTMLElement {
+function sourceBadge(id: string): string | null {
+  const dot = id.indexOf('.');
+  return dot > 0 ? id.slice(0, dot) : null;
+}
+
+function buildRow(entry: RegisteredHotkey): HTMLElement {
   const s = t();
+  const lang = currentLang();
   const row = div('settingsToggleItem dolhk-row');
-  row.dataset.dolhk = action;
+  row.dataset.dolhk = entry.id;
   const column = div('dolhk-col');
+  const head = div('dolhk-head');
+  head.append(span('gold', labelOf(entry, lang)));
+  const badge = entry.builtin ? null : sourceBadge(entry.id);
+  if (badge) head.append(span('dolhk-badge', badge));
+
+  const available = (() => {
+    try {
+      return entry.available() !== false;
+    } catch {
+      return false;
+    }
+  })();
+  if (!available) head.append(span('dolhk-muted', s.unavailable));
+
   const warning = div('dolhk-warn');
-  warnSlots.set(action, warning);
-  column.append(span('gold', s.names[action]), warning);
+  warnSlots.set(entry.id, warning);
+  column.append(head, warning);
 
   const actions = div('dolhk-actions');
   const keyButton = button('dolhk-key', '');
-  setKeyText(keyButton, getConfig().binds[action]);
-  keyButton.addEventListener('click', () => beginCapture(action, keyButton));
+  setKeyText(keyButton, bindOf(entry.id));
+  keyButton.addEventListener('click', () => beginCapture(entry.id, keyButton));
 
   const resetButton = button('dolhk-reset', s.reset);
   resetButton.addEventListener('click', () => {
-    resetBind(action);
+    if (entry.builtin) resetBind(entry.id as ActionId);
+    else setBind(entry.id, [...entry.defaultBind]);
     paintRows();
   });
 
   actions.append(keyButton, resetButton);
   row.append(column, actions);
+  row.classList.toggle('dolhk-disabled', !available);
   return row;
+}
+
+function buildSection(title: string, entries: RegisteredHotkey[]): HTMLElement {
+  const wrap = section(title);
+  const grid = div('dolhk-list');
+  for (const entry of entries) grid.append(buildRow(entry));
+  wrap.append(grid);
+  return wrap;
 }
 
 function paintRows(): void {
   if (!listEl) return;
   listEl.textContent = '';
   warnSlots.clear();
-  for (const action of ACTION_ORDER) listEl.append(buildRow(action));
-  for (const action of ACTION_ORDER) paintWarnings(action);
+
+  const s = t();
+  const lang = currentLang();
+  const all = listRegistry();
+  const builtins = ACTION_ORDER.map(id => all.find(entry => entry.id === id)).filter(
+    (entry): entry is RegisteredHotkey => Boolean(entry),
+  );
+  const external = all.filter(entry => !entry.builtin);
+
+  const groups = new Map<string | null, RegisteredHotkey[]>();
+  for (const entry of external) {
+    const name = groupOf(entry, lang);
+    const bucket = groups.get(name);
+    if (bucket) bucket.push(entry);
+    else groups.set(name, [entry]);
+  }
+
+  const common = [...builtins, ...(groups.get(null) ?? [])];
+  if (common.length) listEl.append(buildSection(s.mine, common));
+
+  for (const [name, entries] of groups) {
+    if (name === null) continue;
+    listEl.append(buildSection(name, entries));
+  }
+
+  for (const entry of all) paintWarnings(entry.id, bindOf(entry.id));
 }
 
 function paintOriginal(): void {
@@ -416,16 +489,58 @@ function applyWidth(): void {
   rootEl.classList.toggle('dolhk-wide', width >= WIDE_MIN);
 }
 
+function buildConflict(config: ReturnType<typeof getConfig>): HTMLElement {
+  const s = t();
+  const item = div('settingsToggleItem dolhk-row dolhk-full');
+  const column = div('dolhk-col');
+  const head = div('dolhk-volume-head');
+  head.append(span('gold', s.conflict), span('dolhk-muted', s.conflictHint));
+
+  const group = div('dolhk-radios');
+  const inputs: HTMLInputElement[] = [];
+  const options: Array<[ConflictMode, string]> = [
+    ['legacy', s.modeLegacy],
+    ['all', s.modeAll],
+    ['first', s.modeFirst],
+  ];
+
+  const sync = (): void => {
+    for (const input of inputs) input.checked = input.value === config.conflictMode;
+  };
+
+  for (const [mode, label] of options) {
+    if (inputs.length > 0) group.append(document.createTextNode(' | '));
+    const wrap = document.createElement('label');
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'dolhk-conflict';
+    input.value = mode;
+    input.addEventListener('change', () => {
+      if (!input.checked) return;
+      config.conflictMode = mode;
+      saveConfig();
+      setConflictMode(mode);
+      paintRows();
+    });
+    inputs.push(input);
+    wrap.append(input, document.createTextNode(` ${label}`));
+    group.append(wrap);
+  }
+  sync();
+
+  column.append(head, group);
+  item.append(column);
+  return item;
+}
+
 function build(): HTMLElement {
   invalidateLang();
   const s = t();
   const config = getConfig();
   const root = div('dolhk');
 
-  const mine = section(s.mine);
-  listEl = div('dolhk-list');
-  mine.append(listEl);
-  root.append(mine);
+  listEl = div('dolhk-sections');
+  root.append(listEl);
 
   const original = section(s.original);
   originalEl = div('dolhk-orig');
@@ -438,7 +553,7 @@ function build(): HTMLElement {
   root.append(original);
 
   const other = section(s.other);
-  other.append(buildLanguage(config), buildVolume(config));
+  other.append(buildLanguage(config), buildVolume(config), buildConflict(config));
   root.append(other);
 
   paintRows();
@@ -458,3 +573,9 @@ function remount(): void {
 export function renderPanel(): HTMLElement {
   return build();
 }
+
+subscribeRegistry(() => {
+  if (isCapturing()) return;
+  if (listEl?.isConnected) paintRows();
+});
+

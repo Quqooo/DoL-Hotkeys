@@ -5,6 +5,22 @@ const ID_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
 const MAX_LABEL = 80;
 
 const entries = new Map<string, RegisteredHotkey>();
+const listeners = new Set<() => void>();
+
+/** 注册表内容变化时回调，供面板重绘 */
+export function subscribe(listener: () => void): void {
+  listeners.add(listener);
+}
+
+function notify(): void {
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn('[dol-hotkeys] registry listener failed', error);
+    }
+  }
+}
 let counter = 0;
 let rev = 0;
 
@@ -96,11 +112,15 @@ function store(input: HotkeyDefInput, id: string, bind: Bind, builtin: boolean):
     order: counter++,
   });
   rev++;
+  notify();
 }
 
 export function unregister(id: string): boolean {
   const removed = entries.delete(id);
-  if (removed) rev++;
+  if (removed) {
+    rev++;
+    notify();
+  }
   return removed;
 }
 

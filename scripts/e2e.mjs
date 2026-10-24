@@ -763,9 +763,52 @@ async function main() {
       JSON.stringify({ removed: api.removed, after: api.after, badId: api.badId }),
     );
 
+    const panelRows = await cdp.evaluate(`(() => {
+      const api = window.DoLHK;
+      const make = (id, group, bind) => ({ id, group, defaultBind: bind, label: id, handler: () => {} });
+      api.register(make('e2e.ungrouped', undefined, ['AltLeft', 'KeyY']));
+      api.register(make('e2e.groupA', { zh: '组甲', en: 'Group A' }, ['AltLeft', 'KeyU']));
+      api.register(make('e2e.groupB', { zh: '组乙', en: 'Group B' }, ['AltLeft', 'KeyO']));
+      const row = id => document.querySelector(\`.dolhk-row[data-dolhk="\${id}"]\`);
+      const headers = [...document.querySelectorAll('.dolhk-sections .settingsHeader')].map(node => node.textContent);
+      const badge = row('e2e.ungrouped')?.querySelector('.dolhk-badge')?.textContent ?? '';
+      const dupText = row('e2e.groupB')?.querySelector('.dolhk-warn')?.textContent ?? '';
+      const commonSection = document.querySelector('.dolhk-sections .settingsGrid');
+      const ungroupedInCommon = Boolean(commonSection?.querySelector('[data-dolhk="e2e.ungrouped"]'));
+      return { headers, badge, dupText, ungroupedInCommon };
+    })()`);
+    check(
+      'L22 third-party rows render with badges and groups',
+      panelRows.headers.join('|') === '常用快捷键|组甲|组乙' || panelRows.headers.join('|') === 'Common hotkeys|Group A|Group B',
+      JSON.stringify(panelRows.headers),
+    );
+    check(
+      'L22 ungrouped entry joins the default section',
+      panelRows.ungroupedInCommon === true && panelRows.badge === 'e2e',
+      JSON.stringify({ inCommon: panelRows.ungroupedInCommon, badge: panelRows.badge }),
+    );
+    check(
+      'L22 conflict hint follows the legacy mode',
+      /仅执行靠前的一项|only the earlier entry runs/.test(panelRows.dupText),
+      panelRows.dupText,
+    );
+
+    const removedRows = await cdp.evaluate(`(() => {
+      for (const id of ['e2e.ungrouped', 'e2e.groupA', 'e2e.groupB']) window.DoLHK.unregister(id);
+      return {
+        rows: document.querySelectorAll('.dolhk-row[data-dolhk^="e2e."]').length,
+        headers: [...document.querySelectorAll('.dolhk-sections .settingsHeader')].length,
+      };
+    })()`);
+    check(
+      'L22 unregister repaints the panel',
+      removedRows.rows === 0 && removedRows.headers === 1,
+      JSON.stringify(removedRows),
+    );
+
     const columns = await cdp.evaluate(`(() => {
       const read = sel => getComputedStyle(document.querySelector(sel)).gridTemplateColumns.split(' ').length;
-      return { list: read('.dolhk-list'), orig: read('.dolhk-orig'), width: document.getElementById('customOverlayContent').clientWidth };
+      return { list: read('.dolhk-sections .dolhk-list'), orig: read('.dolhk-orig'), width: document.getElementById('customOverlayContent').clientWidth };
     })()`);
     check('L14 two columns when space allows', columns.list >= 2 && columns.orig >= 2, JSON.stringify(columns));
 
@@ -1020,13 +1063,13 @@ async function main() {
     const sideBack = await captureMouse('journal', 'back');
     check(
       'L18 back side button recorded as its own code',
-      sideBack.text === 'Back' && sideBack.stored === 'Mouse3',
+      sideBack.text === 'Side 1' && sideBack.stored === 'Mouse3',
       JSON.stringify(sideBack),
     );
     const sideForward = await captureMouse('feats', 'forward');
     check(
       'L18 forward side button recorded as its own code',
-      sideForward.text === 'Forward' && sideForward.stored === 'Mouse4',
+      sideForward.text === 'Side 2' && sideForward.stored === 'Mouse4',
       JSON.stringify(sideForward),
     );
 
@@ -1072,7 +1115,7 @@ async function main() {
 
     const radioState = () =>
       cdp.evaluate(`(() => {
-        const inputs = [...document.querySelectorAll('.dolhk-radios input[type="radio"]')];
+        const inputs = [...document.querySelectorAll('input[name="dolhk-volume"]')];
         const config = JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}');
         return {
           values: inputs.map(node => node.value),
@@ -1093,7 +1136,7 @@ async function main() {
     );
 
     const pickVolume = async value => {
-      await cdp.evaluate(`document.querySelector('.dolhk-radios input[value="${value}"]').click(); true`);
+      await cdp.evaluate(`document.querySelector('input[name="dolhk-volume"][value="${value}"]').click(); true`);
       await sleep(400);
     };
 

@@ -56,6 +56,7 @@
 
 .dolhk-col {
 	display: flex;
+	flex: 1 1 0;
 	flex-direction: column;
 	gap: 3px;
 	min-width: 0;
@@ -73,6 +74,7 @@
 
 .dolhk-actions {
 	display: flex;
+	flex: 0 0 auto;
 	align-items: center;
 	gap: 8px;
 	flex-wrap: wrap;
@@ -92,7 +94,7 @@
 }
 
 .dolhk-key {
-	min-width: 128px;
+	min-width: 104px;
 	text-align: center;
 }
 
@@ -182,6 +184,46 @@
 	}
 
 	.dolhk-key {
-		min-width: 112px;
+		min-width: 104px;
 	}
 }
+
+.dolhk-sections {
+	grid-column: 1 / -1;
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 14px;
+}
+
+.dolhk-wide .dolhk-sections .dolhk-list {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dolhk-head {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 6px;
+	min-width: 0;
+}
+
+.dolhk-head .gold {
+	overflow-wrap: anywhere;
+}
+
+.dolhk-badge {
+	font-size: 78%;
+	opacity: 0.7;
+	border: 1px solid var(--dolhk-border);
+	padding: 0 4px;
+	line-height: 1.5;
+}
+
+.dolhk-disabled .dolhk-col {
+	opacity: 0.6;
+}
+
+.dolhk-full {
+	grid-column: 1 / -1;
+}
+

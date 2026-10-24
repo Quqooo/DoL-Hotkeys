@@ -8,6 +8,8 @@ interface Candidate {
   bind: Bind;
 }
 
+const reported = new Set<string>();
+
 let cacheKey = '';
 let table = new Map<string, Candidate[]>();
 
@@ -71,6 +73,8 @@ function run(item: Candidate, event: Event): void {
       source: item.bind.some(atom => atom.startsWith('Mouse')) ? 'mouse' : 'key',
     });
   } catch (error) {
+    if (reported.has(item.entry.id)) return;
+    reported.add(item.entry.id);
     console.warn(`[dol-hotkeys] handler failed: ${item.entry.id}`, error);
   }
 }
@@ -82,12 +86,11 @@ export function dispatch(held: Bind, event: Event, inputBlocked = false): string
 
   const mode = conflictMode();
 
-  // legacy 只按 ACTION_ORDER 取首个内置命中，第三方项不参与
+  // legacy 忽略 priority，按「内置 ACTION_ORDER → 第三方注册顺序」取首个
   if (mode === 'legacy') {
-    const builtin = matches.find(item => item.entry.builtin);
-    if (!builtin) return null;
-    run(builtin, event);
-    return builtin.entry.id;
+    const chosen = [...matches].sort((a, b) => rankOf(a.entry) - rankOf(b.entry))[0];
+    run(chosen, event);
+    return chosen.entry.id;
   }
 
   if (mode === 'all') {

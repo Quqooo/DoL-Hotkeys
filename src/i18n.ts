@@ -30,7 +30,15 @@ export interface Dict {
   warnBrowser: string;
   warnSide: string;
   warnDup: (name: string) => string;
+  warnDupAll: (name: string) => string;
+  warnDupFirst: (name: string) => string;
   warnModLoader: string;
+  conflict: string;
+  conflictHint: string;
+  modeLegacy: string;
+  modeAll: string;
+  modeFirst: string;
+  unavailable: string;
   names: Record<ActionId, string>;
   orig: {
     links: (from: number, to: number) => string;
@@ -46,7 +54,7 @@ export interface Dict {
 
 const zh: Dict = {
   tab: '快捷键',
-  mine: '自定义快捷键',
+  mine: '常用快捷键',
   original: '原版快捷键（只读）',
   other: '其他',
   pressCombo: '按下组合…',
@@ -73,8 +81,16 @@ const zh: Dict = {
   warnDigit: '含数字键：与原版数字选链接重叠，可能一次触发两件事',
   warnBrowser: '浏览器可能优先处理该组合',
   warnSide: '未加修饰键的鼠标侧键：浏览器可能同时切换页面历史',
-  warnDup: name => `已被「${name}」使用，实际执行列表中靠前者`,
+  warnDup: name => `已被「${name}」使用，仅执行靠前的一项`,
+  warnDupAll: name => `已被「${name}」使用，两者会同时触发`,
+  warnDupFirst: name => `已被「${name}」使用，仅优先级最高者生效`,
   warnModLoader: '与模组管理器的 Alt + M 冲突',
+  conflict: '冲突处理',
+  conflictHint: '同一组合被多个功能占用时',
+  modeLegacy: '保持旧行为',
+  modeAll: '全部触发',
+  modeFirst: '仅触发一个',
+  unavailable: '当前不可用',
   names: {
     back: '回溯',
     forward: '前进',
@@ -102,7 +118,7 @@ const zh: Dict = {
 
 const en: Dict = {
   tab: 'Hotkeys',
-  mine: 'Custom hotkeys',
+  mine: 'Common hotkeys',
   original: 'Vanilla hotkeys (read-only)',
   other: 'Other',
   pressCombo: 'Press a combination…',
@@ -129,8 +145,16 @@ const en: Dict = {
   warnDigit: 'Contains a digit: overlaps vanilla link numbering, may fire two actions at once',
   warnBrowser: 'The browser may handle this combination first',
   warnSide: 'Bare side button: the browser may also navigate its own history',
-  warnDup: name => `Already used by "${name}"; the earlier entry wins`,
+  warnDup: name => `Already used by "${name}"; only the earlier entry runs`,
+  warnDupAll: name => `Already used by "${name}"; both will fire`,
+  warnDupFirst: name => `Already used by "${name}"; only the highest priority runs`,
   warnModLoader: 'Conflicts with the mod manager\'s Alt + M',
+  conflict: 'Conflicts',
+  conflictHint: 'When one combination is used by several actions',
+  modeLegacy: 'Keep current behaviour',
+  modeAll: 'Fire all',
+  modeFirst: 'Fire the first only',
+  unavailable: 'Unavailable now',
   names: {
     back: 'Back',
     forward: 'Forward',
