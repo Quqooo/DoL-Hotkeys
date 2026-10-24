@@ -9,7 +9,7 @@ const entry = path.join(dir, 'decl-entry.ts');
 const out = path.join(dir, 'decl.mjs');
 
 await mkdir(dir, { recursive: true });
-await writeFile(entry, "export * from '../src/decl';\nexport * from '../src/registry';\n");
+await writeFile(entry, "export * from '../src/data/decl';\nexport * from '../src/data/registry';\n");
 await build({
   entryPoints: [entry],
   bundle: true,

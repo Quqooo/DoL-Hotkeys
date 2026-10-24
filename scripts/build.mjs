@@ -39,7 +39,7 @@ const shared = {
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 
-await build({ ...shared, entryPoints: [path.join(root, 'src/early.ts')], outfile: path.join(dist, 'hotkeys-early.js') });
+await build({ ...shared, entryPoints: [path.join(root, 'src/host/early.ts')], outfile: path.join(dist, 'hotkeys-early.js') });
 await build({ ...shared, entryPoints: [path.join(root, 'src/index.ts')], outfile: path.join(dist, 'hotkeys.js') });
 
 await copyFile(path.join(root, 'assets/hotkeys.css'), path.join(dist, 'hotkeys.css'));

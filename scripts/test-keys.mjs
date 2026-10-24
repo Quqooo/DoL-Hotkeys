@@ -9,7 +9,7 @@ const out = path.join(root, 'test-output', 'keys.mjs');
 
 await mkdir(path.dirname(out), { recursive: true });
 await build({
-  entryPoints: [path.join(root, 'src', 'keys.ts')],
+  entryPoints: [path.join(root, 'src', 'core', 'keys.ts')],
   bundle: true,
   format: 'esm',
   platform: 'neutral',
