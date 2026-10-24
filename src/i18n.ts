@@ -32,7 +32,7 @@ export interface Dict {
   warnDup: (name: string) => string;
   warnDupAll: (name: string) => string;
   warnDupFirst: (name: string) => string;
-  warnModLoader: string;
+  warnVanilla: (name: string) => string;
   conflict: string;
   conflictHint: string;
   modeLegacy: string;
@@ -84,7 +84,7 @@ const zh: Dict = {
   warnDup: name => `已被「${name}」使用，仅执行靠前的一项`,
   warnDupAll: name => `已被「${name}」使用，两者会同时触发`,
   warnDupFirst: name => `已被「${name}」使用，仅优先级最高者生效`,
-  warnModLoader: '与模组管理器的 Alt + M 冲突',
+  warnVanilla: name => `与${name}冲突`,
   conflict: '冲突处理',
   conflictHint: '同一组合被多个功能占用时',
   modeLegacy: '保持旧行为',
@@ -148,7 +148,7 @@ const en: Dict = {
   warnDup: name => `Already used by "${name}"; only the earlier entry runs`,
   warnDupAll: name => `Already used by "${name}"; both will fire`,
   warnDupFirst: name => `Already used by "${name}"; only the highest priority runs`,
-  warnModLoader: 'Conflicts with the mod manager\'s Alt + M',
+  warnVanilla: name => `Conflicts with ${name}`,
   conflict: 'Conflicts',
   conflictHint: 'When one combination is used by several actions',
   modeLegacy: 'Keep current behaviour',

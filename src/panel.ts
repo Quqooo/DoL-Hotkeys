@@ -6,6 +6,7 @@ import { currentLang, invalidateLang, setLangOverride, t } from './i18n';
 import { bindHasDigit, bindKey, bindLabel, mouseButtonOf } from './keys';
 import { applyVolumeOverride, hasCordova } from './mobile';
 import { get as getEntry, groupOf, labelOf, list as listRegistry, subscribe as subscribeRegistry } from './registry';
+import { clashOf, labelOfReserved } from './vanilla';
 import { getConfig, resetBind, saveConfig, setBind, setConflictMode } from './settings';
 import {
   ACTION_ORDER,
@@ -231,7 +232,8 @@ function paintWarnings(id: string, bind: Bind): void {
   if (BROWSER_RESERVED.some(reserved => bindKey(reserved) === key)) messages.push(s.warnBrowser);
   const button = mouseButtonOf(bind);
   if (button === 3 || button === 4) messages.push(s.warnSide);
-  if (key === bindKey(['AltLeft', 'KeyM'])) messages.push(s.warnModLoader);
+  const reserved = clashOf(bind);
+  if (reserved) messages.push(s.warnVanilla(labelOfReserved(reserved, lang)));
   slot.textContent = messages.join(' · ');
 }
 

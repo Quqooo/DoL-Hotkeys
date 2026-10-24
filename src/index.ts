@@ -5,6 +5,7 @@ import { currentLang, setLangOverride, t } from './i18n';
 import { applyVolumeOverride, installVolumeKeys } from './mobile';
 import { ensureTab, installTab, openPanel } from './panel';
 import * as registry from './registry';
+import { warnOnRegister } from './vanilla';
 import { getBind as storedBind, getConfig } from './settings';
 
 let listenersInstalled = false;
@@ -47,7 +48,14 @@ function init(): boolean {
 window.DoLHK = {
   api: 1,
   version: __DOLHK_VERSION__,
-  register: registry.register,
+  register: (def) => {
+    const ok = registry.register(def);
+    if (ok) {
+      const bind = getBind(def.id);
+      if (bind) warnOnRegister(def.id, bind);
+    }
+    return ok;
+  },
   unregister: registry.unregister,
   getBind,
   openPanel,

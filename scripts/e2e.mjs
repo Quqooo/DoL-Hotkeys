@@ -793,6 +793,15 @@ async function main() {
       panelRows.dupText,
     );
 
+    const vanillaRow = await cdp.evaluate(`(() => {
+      window.DoLHK.register({ id: 'e2e.vanilla', defaultBind: ['KeyN'], label: 'probe', handler: () => {} });
+      const node = document.querySelector('.dolhk-row[data-dolhk="e2e.vanilla"] .dolhk-warn');
+      const text = node?.textContent ?? '';
+      window.DoLHK.unregister('e2e.vanilla');
+      return text;
+    })()`);
+    check('L22 vanilla collision is reported on the row', /原版|vanilla/i.test(vanillaRow), vanillaRow);
+
     const removedRows = await cdp.evaluate(`(() => {
       for (const id of ['e2e.ungrouped', 'e2e.groupA', 'e2e.groupB']) window.DoLHK.unregister(id);
       return {
@@ -1220,6 +1229,26 @@ async function main() {
 
     await cdp.evaluate(`delete window.cordova; true`);
     await sleep(200);
+
+    const vanillaRefresh = await cdp.evaluate(`(() => {
+      const texts = () => [...document.querySelectorAll('.dolhk-orig-row')].map(node => node.textContent).join('|');
+      const redetect = () => document.querySelector('.dolhk-tools .dolhk-btn')?.click();
+      const before = texts();
+      const trap = window.Mousetrap;
+      if (!trap) return { skip: 'no mousetrap' };
+      trap.unbind('n');
+      redetect();
+      const afterUnbind = texts();
+      trap.reset();
+      redetect();
+      const afterReset = texts();
+      return { before, afterUnbind, afterReset };
+    })()`);
+    check(
+      'L9 vanilla list follows Mousetrap unbind and reset',
+      !vanillaRefresh.skip && vanillaRefresh.before !== vanillaRefresh.afterUnbind && vanillaRefresh.afterUnbind !== vanillaRefresh.afterReset,
+      JSON.stringify({ before: vanillaRefresh.before?.slice(0, 60), afterUnbind: vanillaRefresh.afterUnbind?.slice(0, 60) }),
+    );
 
     const hotkeyErrors = cdp.errors.filter(text => /dol-hotkeys|hotkeys\.js|hotkeys-early\.js/.test(text));
     check('L2 no mod related console errors', hotkeyErrors.length === 0, hotkeyErrors.slice(0, 3).join(' | '));
