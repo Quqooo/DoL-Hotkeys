@@ -36,6 +36,7 @@ export interface Dict {
   conflict: string;
   conflictHint: string;
   modeLegacy: string;
+  modeLegacyTip: string;
   modeAll: string;
   modeFirst: string;
   unavailable: string;
@@ -88,6 +89,7 @@ const zh: Dict = {
   conflict: '冲突处理',
   conflictHint: '同一组合被多个功能占用时',
   modeLegacy: '保持旧行为',
+  modeLegacyTip: '只执行排在最前的一项：内置动作按面板顺序，第三方按注册顺序；优先级在此模式下不参与排序。',
   modeAll: '全部触发',
   modeFirst: '仅触发一个',
   unavailable: '当前不可用',
@@ -152,6 +154,7 @@ const en: Dict = {
   conflict: 'Conflicts',
   conflictHint: 'When one combination is used by several actions',
   modeLegacy: 'Keep current behaviour',
+  modeLegacyTip: 'Only the first match runs: builtin actions in panel order, third-party ones in registration order. Priority does not affect the choice here.',
   modeAll: 'Fire all',
   modeFirst: 'Fire the first only',
   unavailable: 'Unavailable now',

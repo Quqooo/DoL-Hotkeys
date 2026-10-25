@@ -2,6 +2,7 @@ import type { Bind, HotkeyDefInput, LocalizedText } from '../core/types';
 
 interface DeclFields {
   label?: LocalizedText;
+  tip?: LocalizedText;
   defaultBind?: Bind | string;
   group?: LocalizedText;
   priority?: number;
@@ -19,7 +20,7 @@ interface DeclEntry {
   modName: string;
 }
 
-const ALLOWED = new Set(['label', 'defaultBind', 'group', 'priority', 'inInput']);
+const ALLOWED = new Set(['label', 'tip', 'defaultBind', 'group', 'priority', 'inInput']);
 const reported = new Set<string>();
 
 let table = new Map<string, DeclEntry>();
@@ -72,7 +73,7 @@ function pickFields(raw: unknown): { fields: DeclFields; ignored: string[] } {
       ignored.push(key);
       continue;
     }
-    if (key === 'label' || key === 'group') fields[key] = value as LocalizedText;
+    if (key === 'label' || key === 'group' || key === 'tip') fields[key] = value as LocalizedText;
     else if (key === 'defaultBind') fields.defaultBind = value as Bind | string;
     else if (key === 'priority' && typeof value === 'number' && Number.isFinite(value)) fields.priority = value;
     else if (key === 'inInput' && typeof value === 'boolean') fields.inInput = value;
@@ -127,6 +128,7 @@ export function withDeclaration(def: HotkeyDefInput): HotkeyDefInput {
   return {
     ...def,
     label: merge(def.label, decl.fields.label),
+    tip: merge(def.tip, decl.fields.tip),
     defaultBind: merge(def.defaultBind, decl.fields.defaultBind),
     group: merge(def.group, decl.fields.group),
     priority: merge(def.priority, decl.fields.priority),

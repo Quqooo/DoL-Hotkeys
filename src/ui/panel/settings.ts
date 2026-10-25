@@ -3,7 +3,7 @@ import { applyVolumeOverride, hasCordova } from '../../host/mobile';
 import { setLangOverride, t } from '../i18n';
 import { saveConfig, setConflictMode } from '../../core/settings';
 import type { Config, ConflictMode, LangMode } from '../../core/types';
-import { div, span } from './dom';
+import { div, hint, span } from './dom';
 
 type VolumeMode = 'off' | 'on' | 'invert';
 
@@ -14,7 +14,8 @@ function volumeModeOf(config: Config): VolumeMode {
 
 interface RadioSpec<T extends string> {
   name: string;
-  options: Array<[T, string]>;
+  /** [值, 文案, 可选说明]；说明会渲染成选项文字后的 (?) */
+  options: Array<[T, string, string?]>;
   disabled?: boolean;
   /** 当前选中项；返回 null 表示全不选 */
   current: () => T | null;
@@ -34,7 +35,7 @@ function radioRow<T extends string>(spec: RadioSpec<T>): { group: HTMLElement; s
     for (const input of inputs) input.checked = input.value === active;
   };
 
-  for (const [value, label] of spec.options) {
+  for (const [value, label, tip] of spec.options) {
     if (inputs.length > 0) group.append(document.createTextNode(' | '));
     const wrap = document.createElement('label');
     const input = document.createElement('input');
@@ -48,6 +49,8 @@ function radioRow<T extends string>(spec: RadioSpec<T>): { group: HTMLElement; s
     inputs.push(input);
     wrap.append(input, document.createTextNode(` ${label}`));
     group.append(wrap);
+    // (?) 放在 label 之外：点它只看说明，不会被当成选中该项
+    if (tip) group.append(hint(tip));
   }
   sync();
   return { group, sync };
@@ -135,7 +138,7 @@ export function buildConflict(config: Config, repaint: () => void): HTMLElement 
     name: 'dolhk-conflict',
     current: () => config.conflictMode,
     options: [
-      ['legacy', s.modeLegacy],
+      ['legacy', s.modeLegacy, s.modeLegacyTip],
       ['all', s.modeAll],
       ['first', s.modeFirst],
     ],

@@ -21,6 +21,14 @@ export function button(className: string, text: string): HTMLButtonElement {
   return node;
 }
 
+/** 原版 (?)：游戏自己的 tooltip 模块读 `tooltip` 属性生成弹层，样式因此与原版一致 */
+export function hint(text: string): HTMLSpanElement {
+  // 前导不换行空格：与前面的文字始终隔开一格，行首不会被空白折叠吃掉
+  const node = span('tooltip-anchor linkBlue', '\u00A0(?)');
+  node.setAttribute('tooltip', text);
+  return node;
+}
+
 /** 折叠能力由调用方注入，dom 层不感知配置存储 */
 export interface FoldHandlers {
   /** 初始是否收起 */

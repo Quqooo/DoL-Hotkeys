@@ -1,11 +1,11 @@
 import { cancelCapture, isCapturing, startCapture } from '../../runtime/capture';
 import { bindHasDigit, bindKey, bindLabel, mouseButtonOf } from '../../core/keys';
-import { bindOf, get as getEntry, isUsable, labelOf, list as listRegistry } from '../../data/registry';
+import { bindOf, get as getEntry, isUsable, labelOf, list as listRegistry, tipOf } from '../../data/registry';
 import { getConfig, resetBind, setBind } from '../../core/settings';
 import { clashOf, labelOfReserved } from '../../host/vanilla';
 import { currentLang, t } from '../i18n';
 import type { ActionId, Bind, RegisteredHotkey } from '../../core/types';
-import { button, div, section, span } from './dom';
+import { button, div, hint, section, span } from './dom';
 import { foldHandlers } from './fold';
 
 const BROWSER_RESERVED: Bind[] = [
@@ -139,6 +139,8 @@ function buildRow(entry: RegisteredHotkey, repaint: () => void): HTMLElement {
   const column = div('dolhk-col');
   const head = div('dolhk-head');
   head.append(span('gold', labelOf(entry, lang)));
+  const tip = tipOf(entry, lang);
+  if (tip) head.append(hint(tip));
   const badge = entry.builtin ? null : sourceBadge(entry.id);
   if (badge) head.append(span('dolhk-badge', badge));
 

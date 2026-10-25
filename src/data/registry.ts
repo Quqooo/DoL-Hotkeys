@@ -5,6 +5,7 @@ import { ACTION_ORDER, type ActionId, type Bind, type HotkeyDefInput, type Lang,
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
 const MAX_LABEL = 80;
+const MAX_TIP = 240;
 
 const entries = new Map<string, RegisteredHotkey>();
 const listeners = new Set<() => void>();
@@ -106,6 +107,7 @@ function store(input: HotkeyDefInput, id: string, bind: Bind, builtin: boolean):
     id,
     handler: input.handler,
     label: input.label ?? id,
+    tip: input.tip,
     defaultBind: bind,
     group: input.group,
     available: typeof input.available === 'function' ? input.available : () => true,
@@ -143,6 +145,13 @@ export function groupOf(entry: RegisteredHotkey, lang: Lang): string | null {
   if (entry.group === undefined) return null;
   const text = resolveLabel(entry.group, entry.id, lang);
   return text === entry.id ? null : text.slice(0, MAX_LABEL);
+}
+
+/** 说明文字；未提供或解析不出内容时返回 null，行上就不加 (?) */
+export function tipOf(entry: RegisteredHotkey, lang: Lang): string | null {
+  if (entry.tip === undefined) return null;
+  const text = resolveLabel(entry.tip, entry.id, lang);
+  return text === entry.id ? null : text.slice(0, MAX_TIP);
 }
 
 /**

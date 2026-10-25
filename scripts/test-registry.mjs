@@ -36,4 +36,8 @@ check('group absent is null', r.groupOf(r.get('mousetrap.one'), 'zh') === null);
 r.register(def({ id: 'group.one', group: { zh: '我的模组', en: 'My Mod' } }));
 check('group resolved', r.groupOf(r.get('group.one'), 'zh') === '我的模组');
 
+r.register(def({ id: 'tip.one', tip: { zh: '会打开面板', en: 'Opens the panel' } }));
+check('tip resolved', r.tipOf(r.get('tip.one'), 'zh') === '会打开面板');
+check('tip absent is null', r.tipOf(r.get('mousetrap.one'), 'zh') === null);
+
 finish('registry');

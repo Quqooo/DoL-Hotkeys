@@ -33,6 +33,7 @@ setup([
   decl({
     'my.act': {
       label: { zh: '我的动作', en: 'My action' },
+      tip: { zh: '会打开我的面板', en: 'Opens my panel' },
       defaultBind: ['ControlLeft', 'KeyG'],
       group: { zh: '我的模组', en: 'My mod' },
       priority: 5,
@@ -43,13 +44,15 @@ setup([
 check('declaration counted', d.declarationCount() === 1);
 const filled = d.withDeclaration({ id: 'my.act', handler: () => {} });
 check('label filled', filled.label.zh === '我的动作');
+check('tip filled', filled.tip.en === 'Opens my panel');
 check('defaultBind filled', JSON.stringify(filled.defaultBind) === '["ControlLeft","KeyG"]');
 check('group filled', filled.group.en === 'My mod');
 check('priority filled', filled.priority === 5);
 check('inInput filled', filled.inInput === true);
 
-const kept = d.withDeclaration({ id: 'my.act', label: '运行时', priority: 9, inInput: false, handler: () => {} });
+const kept = d.withDeclaration({ id: 'my.act', label: '运行时', tip: '运行时说明', priority: 9, inInput: false, handler: () => {} });
 check('runtime label wins', kept.label === '运行时');
+check('runtime tip wins', kept.tip === '运行时说明');
 check('runtime priority wins', kept.priority === 9);
 check('runtime inInput wins', kept.inInput === false);
 

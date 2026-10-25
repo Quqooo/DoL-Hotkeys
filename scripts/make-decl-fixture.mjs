@@ -22,6 +22,7 @@ const RUNTIME = `(function () {
 const binds = {
   'fixture.act': {
     label: { zh: '夹具动作', en: 'Fixture action' },
+    tip: { zh: '夹具说明：由声明提供', en: 'Fixture tip from the declaration' },
     defaultBind: ['AltLeft', 'ShiftLeft', 'KeyK'],
   },
   'fixture.declonly': {

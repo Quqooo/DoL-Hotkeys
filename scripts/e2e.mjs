@@ -2,7 +2,7 @@
 // 用法：node scripts/e2e.mjs
 // 环境变量：
 //   HK_GAME_HTML / HK_IMAGE_DIR  换游戏版本
-//   HK_SHOT / HK_SHOT_LANG / HK_SHOT_FOLD  结束时截图，并指定语言与收起的分区
+//   HK_SHOT / HK_SHOT_LANG / HK_SHOT_FOLD / HK_SHOT_HINT  结束时截图，并指定语言、收起的分区、悬停的 (?)
 //   HK_EXTRA_ZIPS  逗号分隔的额外模组，用于测共存
 //   HK_DECL_FIXTURE=0  跳过声明层夹具
 //   HK_PROBE=orig|keys|env|dialog|api|perf|sidebar  只打印诊断信息（实现见 probes.mjs）
@@ -566,6 +566,16 @@ async function main() {
       panelRows.dupText,
     );
 
+    const modeTip = await cdp.evaluate(`(() => {
+      const anchor = document.querySelector('.dolhk-radios .tooltip-anchor');
+      return anchor ? { text: anchor.textContent, tip: anchor.getAttribute('tooltip') || '' } : null;
+    })()`);
+    check(
+      'L22 legacy conflict mode carries a hint',
+      modeTip?.text.trim() === '(?)' && modeTip.tip.length > 0,
+      JSON.stringify(modeTip),
+    );
+
     const foldProbe = await cdp.evaluate(`(() => {
       const pick = () => [...document.querySelectorAll('.dolhk-sections .settingsHeader')]
         .find(node => /组甲|Group A/.test(node.textContent));
@@ -665,6 +675,10 @@ async function main() {
           actBind: api.getBind('fixture.act'),
           actKey: row('fixture.act')?.querySelector('.dolhk-key')?.textContent ?? '',
           actLabel: textOf(row('fixture.act')?.querySelector('.gold')),
+          actHint: (() => {
+            const anchor = row('fixture.act')?.querySelector('.dolhk-head .tooltip-anchor');
+            return anchor ? { text: anchor.textContent, tip: anchor.getAttribute('tooltip') || '' } : null;
+          })(),
           actRegistered: Boolean(row('fixture.act')),
           declOnlyRow: Boolean(row('fixture.declonly')),
           declOnlyBind: api.getBind('fixture.declonly'),
@@ -673,12 +687,14 @@ async function main() {
       })()`);
 
       check(
-        'L23 declaration fills the missing defaultBind and label',
+        'L23 declaration fills the missing defaultBind, label and hint',
         decl.actRegistered &&
           JSON.stringify(decl.actBind) === '["AltLeft","ShiftLeft","KeyK"]' &&
           decl.actKey === 'Alt + Shift + K' &&
-          /夹具动作|Fixture action/.test(decl.actLabel),
-        JSON.stringify({ bind: decl.actBind, key: decl.actKey, label: decl.actLabel }),
+          /夹具动作|Fixture action/.test(decl.actLabel) &&
+          decl.actHint?.text.trim() === '(?)' &&
+          /夹具说明|Fixture tip/.test(decl.actHint.tip),
+        JSON.stringify({ bind: decl.actBind, key: decl.actKey, label: decl.actLabel, hint: decl.actHint }),
       );
       check(
         'L23 declared-only entry never becomes a row',
@@ -1185,6 +1201,28 @@ async function main() {
     });
     await sleep(400);
     console.log(`  panel standalone: ${shotReady}`);
+
+    // HK_SHOT_HINT=1：把第一个 (?) 悬停出来核对弹层
+    // 必须在 body 重建之后：弹层挂在 body 上，先前建会被 innerHTML 清掉
+    if (process.env.HK_SHOT_HINT) {
+      await cdp.evaluate(`(() => {
+        const anchor = document.querySelector('.dolhk-radios .tooltip-anchor')
+          ?? document.querySelector('.dolhk .tooltip-anchor');
+        if (!anchor) return false;
+        const rect = anchor.getBoundingClientRect();
+        anchor.dispatchEvent(new MouseEvent('mouseover', {
+          bubbles: true,
+          clientX: Math.round(rect.left + rect.width / 2),
+          clientY: Math.round(rect.bottom),
+          relatedTarget: document.body,
+        }));
+        return true;
+      })()`);
+      await sleep(500);
+      const popups = await cdp.evaluate(`document.querySelectorAll('.tooltip-popup').length`);
+      console.log(`  hint popups: ${popups}`);
+    }
+
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
     await writeFile(path.join(OUTPUT_DIR, SHOT_NAME), Buffer.from(shot.data, 'base64'));
     console.log(`  screenshot -> ${path.relative(root, path.join(OUTPUT_DIR, SHOT_NAME))}`);

@@ -67,6 +67,8 @@ export interface HotkeyDefInput {
   id: string;
   handler: (ctx: HotkeyContext) => void;
   label?: LocalizedText;
+  /** 行尾 (?) 的说明文字，悬停时由原版 tooltip 弹层显示 */
+  tip?: LocalizedText;
   /** 结构化 Bind，或可无歧义解析的 Mousetrap 单组合串 */
   defaultBind?: Bind | string;
   group?: LocalizedText;
@@ -79,6 +81,7 @@ export interface RegisteredHotkey {
   id: string;
   handler: (ctx: HotkeyContext) => void;
   label: LocalizedText;
+  tip?: LocalizedText;
   defaultBind: Bind;
   group?: LocalizedText;
   available: () => boolean;
