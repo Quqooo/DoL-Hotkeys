@@ -45,6 +45,27 @@ function toBind(input: HotkeyDefInput['defaultBind']): Bind | null {
   return normalizeBind(input);
 }
 
+/** 只接受字符串、函数或 `{ zh, en }` 对象；其余值按未提供处理 */
+function toText(raw: unknown): LocalizedText | undefined {
+  if (typeof raw === 'string') return raw.trim() ? raw : undefined;
+  if (typeof raw === 'function') return raw as LocalizedText;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const source = raw as { zh?: unknown; en?: unknown };
+  const text: { zh?: string; en?: string } = {};
+  if (typeof source.zh === 'string' && source.zh.trim()) text.zh = source.zh.trim();
+  if (typeof source.en === 'string' && source.en.trim()) text.en = source.en.trim();
+  return text.zh === undefined && text.en === undefined ? undefined : text;
+}
+
+/** 归一并在丢弃非法值时诊断一次，便于第三方定位自己传错的字段 */
+function textOf(field: string, raw: unknown, id: string): LocalizedText | undefined {
+  const text = toText(raw);
+  if (raw !== undefined && text === undefined) {
+    warn(`${field} of "${id}" is not a string, a function or a { zh, en } object`);
+  }
+  return text;
+}
+
 /**
  * 分组引用归一。字符串视为只有 id 的写法，id 不要求命名空间，
  * 因此任何模组都能用同一个 id 加入别的模组创建的分组。
@@ -66,23 +87,29 @@ function toGroup(raw: GroupRef | undefined, id: string): GroupDecl | undefined {
     warn(`group of "${id}" needs a non-empty id`);
     return undefined;
   }
-  return raw.label === undefined ? { id: groupId } : { id: groupId, label: raw.label };
+  const label = textOf('group label', raw.label, id);
+  return label === undefined ? { id: groupId } : { id: groupId, label };
 }
 
-export function resolveLabel(text: LocalizedText | undefined, id: string, lang: Lang): string {
-  if (text === undefined) return id;
+/**
+ * 解析本地化文本。参数用 `unknown`：调用方可能把第三方传入的值直接丢进来，
+ * 因此非字符串、非函数、非 `{ zh, en }` 对象一律回退到 id，不抛错。
+ */
+export function resolveLabel(text: unknown, id: string, lang: Lang): string {
   if (typeof text === 'string') return text.trim() || id;
   if (typeof text === 'function') {
     try {
-      const value = text(lang);
+      const value = (text as (lang: Lang) => unknown)(lang);
       return typeof value === 'string' && value.trim() ? value.trim() : id;
     } catch {
       return id;
     }
   }
-  const primary = text[lang];
+  if (!text || typeof text !== 'object') return id;
+  const record = text as Record<string, unknown>;
+  const primary = record[lang];
   if (typeof primary === 'string' && primary.trim()) return primary.trim();
-  const fallback = text[lang === 'zh' ? 'en' : 'zh'];
+  const fallback = record[lang === 'zh' ? 'en' : 'zh'];
   return typeof fallback === 'string' && fallback.trim() ? fallback.trim() : id;
 }
 
@@ -131,8 +158,8 @@ function store(input: HotkeyDefInput, id: string, bind: Bind, builtin: boolean):
   entries.set(id, {
     id,
     handler: input.handler,
-    label: input.label ?? id,
-    tip: input.tip,
+    label: textOf('label', input.label, id) ?? id,
+    tip: textOf('tip', input.tip, id),
     defaultBind: bind,
     group: toGroup(input.group, id),
     available: typeof input.available === 'function' ? input.available : () => true,

@@ -1,6 +1,14 @@
 import type { EarlyRegistry } from '../globals';
 
-const registry: EarlyRegistry = { bindings: [], native: [], mousetrapSeen: false };
+/**
+ * 早期包：在 InjectEarlyLoad 阶段采集原版与第三方的按键绑定。
+ * 安装状态记在 `window.__DoLHKEarly` 上，重复求值不会二次包装。
+ */
+
+/** 重复求值时复用同一份观测数据：已安装的包装仍向这个对象写入 */
+const previous = window.__DoLHKEarly;
+const registry: EarlyRegistry =
+  previous && Array.isArray(previous.bindings) ? previous : { bindings: [], native: [], mousetrapSeen: false };
 
 window.__DoLHKEarly = registry;
 
@@ -79,49 +87,70 @@ function recordNative(type: unknown, listener: unknown): void {
   registry.native.push({ keys: type, combos: [type], src: String(listener) });
 }
 
-try {
-  const originalAdd = EventTarget.prototype.addEventListener;
-  EventTarget.prototype.addEventListener = function patchedAdd(
-    this: EventTarget,
-    type: string,
-    listener: any,
-    options?: boolean | AddEventListenerOptions,
-  ) {
-    try {
-      recordNative(type, listener);
-    } catch {
-      /* 记录失败不得影响监听注册 */
-    }
-    return originalAdd.call(this, type, listener, options);
-  };
-} catch {
-  /* ignore */
-}
-
 let current: any;
 
-try {
-  Object.defineProperty(window, 'Mousetrap', {
-    configurable: true,
-    enumerable: true,
-    get() {
-      return current;
-    },
-    set(value: any) {
-      current = instrument(value);
-      if (current) registry.mousetrapSeen = true;
-    },
-  });
-} catch {
-  /* 全局不可配置时为只读，检测回退到内置快照 */
+function installMousetrapAccessor(): void {
+  const prior = Object.getOwnPropertyDescriptor(window, 'Mousetrap');
+  // 已有访问器说明别的代码也在拦截该全局，交给对方，检测回退到内置快照
+  if (prior && (prior.get || prior.set)) return;
+  if (prior && 'value' in prior) {
+    current = instrument(prior.value);
+    if (current) registry.mousetrapSeen = true;
+  }
+  try {
+    Object.defineProperty(window, 'Mousetrap', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return current;
+      },
+      set(value: any) {
+        current = instrument(value);
+        if (current) registry.mousetrapSeen = true;
+      },
+    });
+  } catch {
+    /* 全局不可配置时为只读，检测回退到内置快照 */
+  }
 }
+
+/** 包装只安装一次；`installed` 落在共享 registry 上，重复求值不再叠加监听与访问器 */
+function installWrappers(): void {
+  if (registry.installed) return;
+  registry.installed = true;
+
+  try {
+    const originalAdd = EventTarget.prototype.addEventListener;
+    EventTarget.prototype.addEventListener = function patchedAdd(
+      this: EventTarget,
+      type: string,
+      listener: any,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      try {
+        recordNative(type, listener);
+      } catch {
+        /* 记录失败不得影响监听注册 */
+      }
+      return originalAdd.call(this, type, listener, options);
+    };
+  } catch {
+    /* ignore */
+  }
+
+  installMousetrapAccessor();
+}
+
+installWrappers();
 
 /** 每个模组的第 n 次回调对应其第 n 条声明，避免同一次注册被重复采集 */
 const cursor = new WeakMap<object, number>();
 
 function registerAddon(): void {
+  if (registry.addonRegistered) return;
   const manager = (window as any).modSC2DataManager?.getAddonPluginManager?.();
   if (!manager || typeof manager.registerAddonPlugin !== 'function') return;
+  registry.addonRegistered = true;
   try {
     manager.registerAddonPlugin('DoL Hotkeys', 'hotkeys', {
       async registerMod(_addonName: string, mod: any): Promise<void> {

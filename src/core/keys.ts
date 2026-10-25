@@ -222,6 +222,15 @@ export function normalizeBind(input: unknown): Bind | null {
   return out;
 }
 
+/**
+ * 读取已保存的键位。空数组表示用户显式清空，属于合法配置；
+ * 注册与声明仍走 `normalizeBind`，不接受空键位。
+ */
+export function normalizeSavedBind(input: unknown): Bind | null {
+  if (Array.isArray(input) && input.length === 0) return [];
+  return normalizeBind(input);
+}
+
 /** 旧编码迁移：`Ctrl+KeyA,KeyB` → [ControlLeft, KeyA, KeyB]；旧编码不含顺序，修饰符置于前部 */
 export function legacyStepToBind(step: string): Bind | null {
   if (typeof step !== 'string' || !step) return null;

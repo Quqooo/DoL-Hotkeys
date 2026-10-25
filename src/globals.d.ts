@@ -11,6 +11,10 @@ export interface EarlyRegistry {
   bindings: EarlyBinding[];
   native: EarlyBinding[];
   mousetrapSeen: boolean;
+  /** 包装是否已安装；重复求值时据此跳过再次包装 */
+  installed?: boolean;
+  /** addon 是否已注册；ModLoader 不去重，重复注册会让声明被采集两次 */
+  addonRegistered?: boolean;
 }
 
 declare global {

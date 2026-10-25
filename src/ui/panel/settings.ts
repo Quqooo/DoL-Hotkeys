@@ -143,8 +143,6 @@ export function buildConflict(config: Config, repaint: () => void): HTMLElement 
       ['first', s.modeFirst],
     ],
     onPick: mode => {
-      config.conflictMode = mode;
-      saveConfig();
       setConflictMode(mode);
       repaint();
     },

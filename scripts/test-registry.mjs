@@ -57,6 +57,22 @@ check('label falls back to id once its provider is gone', r.groupLabelOf('plain'
 r.register(def({ id: 'group.bad', group: { zh: '旧写法' } }));
 check('group without an id is ignored', r.groupIdOf(r.get('group.bad')) === null);
 
+check('null label falls back to id', r.resolveLabel(null, 'x.y', 'zh') === 'x.y');
+check('number label falls back to id', r.resolveLabel(42, 'x.y', 'zh') === 'x.y');
+check('array label falls back to id', r.resolveLabel([], 'x.y', 'zh') === 'x.y');
+
+r.register(def({ id: 'label.null', label: null }));
+check('null label falls back to the id', r.labelOf(r.get('label.null'), 'zh') === 'label.null');
+
+r.register(def({ id: 'tip.null', tip: null }));
+check('null tip is treated as absent', r.tipOf(r.get('tip.null'), 'zh') === null);
+
+r.register(def({ id: 'group.null', group: { id: 'null.group', label: null } }));
+check('invalid group label is dropped instead of crashing', r.groupLabelOf('null.group', 'zh') === 'null.group');
+
+r.register(def({ id: 'group.mixed', group: { id: 'mixed.group', label: { zh: '   ', en: 'Mixed' } } }));
+check('group label keeps the language that has text', r.groupLabelOf('mixed.group', 'zh') === 'Mixed');
+
 r.register(def({ id: 'tip.one', tip: { zh: '会打开面板', en: 'Opens the panel' } }));
 check('tip resolved', r.tipOf(r.get('tip.one'), 'zh') === '会打开面板');
 check('tip absent is null', r.tipOf(r.get('mousetrap.one'), 'zh') === null);

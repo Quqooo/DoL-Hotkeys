@@ -1,4 +1,4 @@
-import { bindFromLegacySteps, normalizeBind } from './keys';
+import { bindFromLegacySteps, normalizeSavedBind } from './keys';
 import { ACTION_ORDER, type ActionId, type Bind, type ConflictMode, type Config, type LangMode } from './types';
 
 const STORAGE_KEY = 'dol-hotkeys:config';
@@ -121,7 +121,7 @@ function applyStored(parsed: Record<string, unknown>, config: Config): boolean {
 
   const rawBinds = parsed.binds && typeof parsed.binds === 'object' ? (parsed.binds as Record<string, unknown>) : {};
   if (version >= 3) {
-    readBinds(rawBinds, config, normalizeBind);
+    readBinds(rawBinds, config, normalizeSavedBind);
     return false;
   }
   if (version < 2) migrateV1ToV2(rawBinds);
