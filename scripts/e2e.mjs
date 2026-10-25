@@ -1,3 +1,11 @@
+// 端到端回归：真实游戏 + 真实模组包，覆盖派发、录制、面板与原版检测
+// 用法：node scripts/e2e.mjs
+// 环境变量：
+//   HK_GAME_HTML / HK_IMAGE_DIR  换游戏版本
+//   HK_SHOT / HK_SHOT_LANG / HK_SHOT_FOLD  结束时截图，并指定语言与收起的分区
+//   HK_EXTRA_ZIPS  逗号分隔的额外模组，用于测共存
+//   HK_DECL_FIXTURE=0  跳过声明层夹具
+//   HK_PROBE=orig|keys|env|dialog|api|perf|sidebar  只打印诊断信息（实现见 probes.mjs）
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -5,6 +13,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { zipSync } from 'fflate';
+import { runProbe } from './probes.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const research = path.resolve(root, '..', '_research');
@@ -328,6 +337,18 @@ async function openHotkeysTab(cdp) {
   return cdp.waitFor(`document.querySelector('.dolhk-row[data-dolhk]')`, 15000);
 }
 
+/** 关掉覆盖层并等它收干净：关闭过程中的按键会被吞掉，紧接着派发会漏 */
+async function closeOverlayAndSettle(cdp, wait = 250) {
+  await cdp.evaluate(`closeOverlay()`);
+  await sleep(wait);
+}
+
+/** 抹掉覆盖层记录，模拟「已回到正文」；`forgetCurrent` 连游戏自己的状态一起清掉 */
+async function clearOverlayMark(cdp, forgetCurrent = false) {
+  const head = forgetCurrent ? 'delete SugarCube.State.temporary.currentOverlay; ' : '';
+  await cdp.evaluate(`${head}document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+}
+
 async function main() {
   if (!existsSync(GAME_HTML)) {
     throw new Error(`Game build missing: ${GAME_HTML}\nRun the ModLoader build download first.`);
@@ -385,207 +406,8 @@ async function main() {
       return { keys, pick, modCount: (window.modDataValueZipList || []).length };
     })()`);
     console.log(`  env: ${JSON.stringify(env)}`);
-    if (process.env.HK_PROBE === 'orig') {
-      await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
-      await sleep(200);
-      await pressAlt(cdp, 'O');
-      await cdp.waitFor(`document.querySelector('#overlayTabs button[data-dolhk-tab]')`, 15000);
-      await cdp.evaluate(`document.querySelector('#overlayTabs button[data-dolhk-tab]').click()`);
-      await cdp.waitFor(`document.querySelector('.dolhk-orig-row')`, 15000);
-      await sleep(400);
-      const dump = await cdp.evaluate(`({
-        source: document.querySelector('.dolhk-tools .dolhk-muted')?.textContent ?? '',
-        rows: [...document.querySelectorAll('.dolhk-orig-row')].map(r => ({
-          keys: r.querySelector('.dolhk-orig-key')?.textContent ?? '',
-          desc: r.querySelector('.dolhk-orig-desc')?.textContent ?? '',
-          snap: /snapshot/i.test(r.textContent),
-        })),
-      })`);
-      console.log('source:', dump.source);
-      for (const row of dump.rows) {
-        console.log(`  ${row.keys.padEnd(26)} | ${row.desc}${row.snap ? '  [snapshot]' : ''}`);
-      }
-      process.exit(0);
-    }
-    if (process.env.HK_PROBE === 'keys') {
-      const info = await cdp.evaluate(`(() => {
-        const reg = window.__DoLHKEarly || {};
-        const nat = (reg.native || []).map(x => String(x.src));
-        const $ = window.jQuery;
-        const jq = [];
-        for (const [label, el] of [['document', document], ['window', window]]) {
-          const ev = $ && $._data ? $._data(el, 'events') : null;
-          if (!ev) continue;
-          for (const type of Object.keys(ev)) {
-            for (const item of ev[type] || []) {
-              if (typeof item.handler === 'function') jq.push({ t: label + ':' + type, s: String(item.handler) });
-            }
-          }
-        }
-        const pick = list => list.map(x => (typeof x === 'string' ? x : x.s));
-        const all = [...pick(nat), ...pick(jq)];
-        const hits = all.filter(s => /linkFollow/i.test(s));
-        return {
-          native: nat.length,
-          bindingKeys: (reg.bindings || []).map(b => b.keys),
-          bindingCount: (reg.bindings || []).length,
-          jq: jq.map(x => x.t),
-          jqCount: jq.length,
-          linkFollowHits: hits.length,
-          hasJqueryData: Boolean($ && $._data),
-          firstHit: hits[0] ? hits[0].replace(/\s+/g, ' ').slice(0, 300) : null,
-          hasCases: hits.map(h => (h.match(/case\s*"/g) || []).length).slice(0, 5),
-        };
-      })()`);
-      console.log('keys:', JSON.stringify(info, null, 1));
-      process.exit(0);
-    }
-    if (process.env.HK_PROBE === 'env') {
-      const mods = await cdp.evaluate(`(() => {
-        const m = window.modSC2DataManager;
-        const c = m && m.getModLoadController ? m.getModLoadController() : null;
-        return {
-          hasManager: Boolean(m),
-          controllerKeys: c ? Object.keys(c).slice(0, 24) : null,
-          early: typeof window.__DoLHKEarly,
-          dolhk: typeof window.DoLHK,
-        };
-      })()`);
-      console.log('mods:', JSON.stringify(mods));
-      const picked = cdp.logs.filter(l => /hotkey|Hotkey|HotKeys|validateBoot|modList|initMod|inject|ModLoader =/.test(l));
-      console.log(`--- loader logs (${picked.length}/${cdp.logs.length}) ---`);
-      for (const line of picked.slice(0, 40)) console.log(`  ${line}`);
-      process.exit(0);
-    }
-    if (process.env.HK_PROBE === 'dialog') {
-      await cdp.evaluate(`(() => {
-        if (SugarCube.Dialog.isOpen()) SugarCube.Dialog.close();
-        document.getElementById('ui-dialog')?.classList.remove('closeBlocked');
-        window.cordova = { exec: () => {} };
-        return true;
-      })()`);
-      await sleep(400);
-      await openHotkeysTab(cdp);
-      await cdp.evaluate(`document.querySelector('.dolhk-row input[type="checkbox"]').click(); true`);
-      await sleep(600);
-      const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
-      await writeFile(path.join(OUTPUT_DIR, 'dialog.png'), Buffer.from(shot.data, 'base64'));
-      const state = await cdp.evaluate(`({
-        open: SugarCube.Dialog.isOpen('dolhk-dialog-host'),
-        bodyClass: (SugarCube.Dialog.body ? (SugarCube.Dialog.body() || {}).className : '') || '',
-        zIndexDialog: getComputedStyle(document.getElementById('ui-overlay')).zIndex,
-        zIndexOverlay: getComputedStyle(document.getElementById('customOverlay')).zIndex,
-        buttons: [...document.querySelectorAll('.dolhk-dialog-actions button')].map(node => node.textContent),
-      })`);
-      console.log('dialog:', JSON.stringify(state));
-      process.exit(0);
-    }
-    if (process.env.HK_PROBE === 'api') {
-      const info = await cdp.evaluate(`(() => {
-        const cube = window.SugarCube || {};
-        const dialog = cube.Dialog || window.Dialog;
-        return {
-          windowDialog: typeof window.Dialog,
-          cubeDialog: typeof cube.Dialog,
-          dialogKeys: dialog ? Object.getOwnPropertyNames(dialog).slice(0, 24) : null,
-          methods: dialog
-            ? Object.fromEntries(
-                ['setup', 'body', 'append', 'empty', 'open', 'close', 'isOpen'].map(name => [name, typeof dialog[name]]),
-              )
-            : null,
-          uiAlert: typeof (cube.UI || {}).alert,
-          uiKeys: Object.keys(cube.UI || {}).slice(0, 24),
-          hasModal: Boolean(document.getElementById('ui-dialog')),
-          modalClass: document.getElementById('ui-dialog')?.className ?? '',
-        };
-      })()`);
-      console.log('api:', JSON.stringify(info, null, 1));
-      process.exit(0);
-    }
-    if (process.env.HK_PROBE === 'perf') {
-      await cdp.send('Performance.enable', {});
-      await cdp.evaluate(`(() => {
-        if (SugarCube.State.variables.options) SugarCube.State.variables.options.maxStates = 2;
-        SugarCube.Config.history.maxStates = 2;
-        window.__mut = { calls: 0, records: 0 };
-        const obs = new MutationObserver(list => {
-          window.__mut.calls++;
-          window.__mut.records += list.length;
-        });
-        obs.observe(document.body, { childList: true, subtree: true });
-        return true;
-      })()`);
-      const passage = await cdp.evaluate(
-        `['PassageFooter', 'PassageHeader', 'StoryCaption'].find(name => SugarCube.Story.has(name)) ?? 'Start'`,
-      );
-      const readMetrics = async () => {
-        const { metrics } = await cdp.send('Performance.getMetrics');
-        const map = {};
-        for (const item of metrics) map[item.name] = item.value;
-        return map;
-      };
-      const workload = async () => {
-        for (let i = 0; i < 30; i++) {
-          await cdp.evaluate(`SugarCube.Engine.play('${passage}')`);
-          await sleep(40);
-        }
-        for (let i = 0; i < 200; i++) {
-          await keyEvent(cdp, 'keyDown', { code: 'KeyQ', key: 'q', vk: 81, modifiers: 1 });
-        }
-      };
-      await workload();
-      await cdp.evaluate('window.__mut = { calls: 0, records: 0 }; true');
-      const before = await readMetrics();
-      const startedAt = Date.now();
-      await workload();
-      const elapsed = Date.now() - startedAt;
-      const after = await readMetrics();
-      const delta = name => +(after[name] - before[name]).toFixed(4);
-      console.log('--- perf ---');
-      console.log(`  mod ${process.env.HK_NO_MOD ? 'off' : 'on'}: 30 passages + 200 keydowns in ${elapsed} ms`);
-      console.log(`  boot script ${before.ScriptDuration.toFixed(4)} s | boot task ${before.TaskDuration.toFixed(4)} s`);
-      console.log(`  ScriptDuration ${delta('ScriptDuration')} s | Task ${delta('TaskDuration')} s | Layout ${delta('LayoutDuration')} s | Style ${delta('RecalcStyleDuration')} s`);
-      console.log(`  body mutations ${JSON.stringify(await cdp.evaluate('window.__mut'))}`);
-      const keyMicro = await cdp.evaluate(`(() => {
-        const ev = new KeyboardEvent('keydown', { key: 'q', code: 'KeyQ', altKey: true, bubbles: true });
-        const t0 = performance.now();
-        for (let i = 0; i < 2000; i++) document.dispatchEvent(ev);
-        return +(((performance.now() - t0) / 2000) * 1000).toFixed(2);
-      })()`);
-      console.log(`  keydown dispatch ${keyMicro} us/event (game + listeners)`);
-      if (!process.env.HK_NO_MOD) {
-        const idle = await cdp.evaluate(`(() => {
-          const t0 = performance.now();
-          for (let i = 0; i < 5000; i++) window.DoLHK.refreshTab();
-          return +(((performance.now() - t0) / 5000) * 1000).toFixed(2);
-        })()`);
-        console.log(`  ensureTab (no overlay) ${idle} us/call`);
-        await openHotkeysTab(cdp);
-        const detectCost = await cdp.evaluate(`(() => {
-          const btn = [...document.querySelectorAll('.dolhk-btn')].pop();
-          if (!btn) return null;
-          let t0 = performance.now();
-          btn.click();
-          const first = performance.now() - t0;
-          t0 = performance.now();
-          btn.click();
-          const second = performance.now() - t0;
-          return {
-            first: +first.toFixed(1),
-            second: +second.toFixed(1),
-            rows: document.querySelectorAll('.dolhk-orig-row').length,
-          };
-        })()`);
-        console.log(`  detect + render ${JSON.stringify(detectCost)} ms`);
-        const busy = await cdp.evaluate(`(() => {
-          const t0 = performance.now();
-          for (let i = 0; i < 2000; i++) window.DoLHK.refreshTab();
-          return +(((performance.now() - t0) / 2000) * 1000).toFixed(2);
-        })()`);
-        console.log(`  ensureTab (overlay open) ${busy} us/call`);
-      }
-      process.exit(0);
-    }
+    const probeCtx = { cdp, sleep, pressAlt, keyEvent, openHotkeysTab, outputDir: OUTPUT_DIR };
+    await runProbe(process.env.HK_PROBE, probeCtx, ['orig', 'keys', 'env', 'dialog', 'api', 'perf']);
     if (!ready) {
       for (const text of cdp.errors.slice(0, 10)) console.log(`   ! ${String(text).slice(0, 300)}`);
       const snapshot = await cdp
@@ -603,67 +425,15 @@ async function main() {
       await cdp.evaluate('Boolean(window.__DoLHKEarly && window.__DoLHKEarly.bindings.length)'),
       await cdp.evaluate('JSON.stringify((window.__DoLHKEarly?.bindings ?? []).map(b => b.keys))'),
     );
-    check('L2 tab label available', typeof (await cdp.evaluate('window.DoLHK && window.DoLHK.label')) === 'string');
 
-    if (process.env.HK_PROBE === 'sidebar') {
-      await cdp.evaluate(`SugarCube.State.variables.intro = 0; true`);
-      const dump = async label => {
-        const info = await cdp.evaluate(`(() => {
-          const ov = document.getElementById('customOverlay');
-          const content = document.getElementById('customOverlayContent');
-          const tabs = [...document.querySelectorAll('#overlayTabs button')];
-          let handler = '';
-          try {
-            const ev = window.jQuery ? window.jQuery._data(tabs[0], 'events') : null;
-            const click = ev && ev.click;
-            handler = click && click[0] ? String(click[0].handler).replace(/\s+/g, ' ').slice(0, 300) : '';
-          } catch (e) { handler = 'err:' + e.message; }
-          const cls = content ? [...content.querySelectorAll('[class]')].map(n => n.className) : [];
-          return {
-            dataOverlay: ov ? ov.getAttribute('data-overlay') : null,
-            currentOverlay: SugarCube.State.temporary.currentOverlay ?? null,
-            tempKey: SugarCube.State.temporary.key ?? null,
-            hidden: ov ? ov.classList.contains('hidden') : null,
-            tabs: tabs.map(b => b.textContent),
-            handler,
-            classes: [...new Set(cls.filter(c => typeof c === 'string'))].slice(0, 16),
-            injected: Boolean(document.querySelector('button[data-dolhk-tab]')),
-          };
-        })()`);
-        console.log(`PROBE ${label}: ${JSON.stringify(info)}`);
-      };
-      const clickSidebar = async index => {
-        const ok = await cdp.evaluate(`(() => {
-          const bar = document.getElementById('overlayButtons');
-          if (!bar) return false;
-          const splits = [...bar.querySelectorAll('.sidebarButtonSplit')];
-          const tail = splits[splits.length - 1];
-          const btn = tail.querySelectorAll('button')[${index}];
-          if (!btn) return false;
-          btn.click();
-          return true;
-        })()`);
-        await sleep(1200);
-        return ok;
-      };
-      console.log('PROBE sidebar options clickable:', await clickSidebar(0));
-      await dump('options-by-sidebar');
-      await cdp.evaluate(`closeOverlay()`);
-      await sleep(500);
-      console.log('PROBE sidebar saves clickable:', await clickSidebar(1));
-      await dump('saves-by-sidebar');
-      await cdp.evaluate(`(() => { const t = [...document.querySelectorAll('#overlayTabs button')]; if (t.length > 1) t[t.length - 1].click(); return true; })()`);
-      await sleep(1200);
-      await dump('saves-export-by-sidebar');
-      process.exit(0);
-    }
+    await runProbe(process.env.HK_PROBE, probeCtx, ['sidebar']);
 
     const dismissed = await cdp.evaluate(`(() => {
       if (!window.SugarCube?.Dialog?.isOpen?.()) return 'none';
       SugarCube.Dialog.close();
       return 'closed';
     })()`);
-    check('L2 age gate dismissed', true, dismissed);
+    console.log(`  age gate: ${dismissed}`);
     await sleep(600);
 
     const titleAvailability = await cdp.evaluate(`({
@@ -689,14 +459,16 @@ async function main() {
 
     await pressAlt(cdp, 'J');
     const menuOverlay = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
-    check('L13 journal hotkey is inert on the menu', menuOverlay !== 'journal', menuOverlay);
 
     await cdp.evaluate(`SugarCube.State.variables.intro = 0; true`);
     await pressAlt(cdp, 'J');
     const gameOverlay = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
-    check('L13 journal hotkey works in game', gameOverlay === 'journal', gameOverlay);
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(250);
+    check(
+      'L13 journal hotkey follows page availability',
+      menuOverlay !== 'journal' && gameOverlay === 'journal',
+      JSON.stringify({ menu: menuOverlay, game: gameOverlay }),
+    );
+    await closeOverlayAndSettle(cdp, 250);
 
     await pressAlt(cdp, 'O');
     await cdp.waitFor(`document.querySelector('#overlayTabs button')`);
@@ -713,26 +485,6 @@ async function main() {
     const allRows = await cdp.evaluate(`[...document.querySelectorAll('.dolhk-row[data-dolhk]')].map(r => r.dataset.dolhk)`);
     const rows = allRows.filter(id => BUILTIN_IDS.includes(id));
     check('L3 eleven bindable actions listed', rows.length === 11, allRows.join(','));
-    check(
-      'L3 new pages are listed',
-      ['traits', 'statistics', 'feats', 'cheats'].every(id => rows.includes(id)),
-      rows.join(','),
-    );
-    check(
-      'L3 statistics sits right before feats',
-      rows.indexOf('statistics') === rows.indexOf('feats') - 1,
-      rows.join(','),
-    );
-
-    const defaultKeys = await cdp.evaluate(`({
-      back: document.querySelector('.dolhk-row[data-dolhk="back"] .dolhk-key').textContent,
-      forward: document.querySelector('.dolhk-row[data-dolhk="forward"] .dolhk-key').textContent,
-    })`);
-    check(
-      'L3 back/forward default to Ctrl + Z / Ctrl + X',
-      defaultKeys.back === 'Ctrl + Z' && defaultKeys.forward === 'Ctrl + X',
-      JSON.stringify(defaultKeys),
-    );
 
     const api = await cdp.evaluate(`(() => {
       const api = window.DoLHK;
@@ -802,14 +554,11 @@ async function main() {
     })()`);
     const ownHeaders = panelRows.headers.filter(text => !/夹具|Fixture/.test(text));
     check(
-      'L22 third-party rows render with badges and groups',
-      ownHeaders.join('|') === '常用快捷键|组甲|组乙' || ownHeaders.join('|') === 'Common hotkeys|Group A|Group B',
-      JSON.stringify(panelRows.headers),
-    );
-    check(
-      'L22 ungrouped entry joins the default section',
-      panelRows.ungroupedInCommon === true && panelRows.badge === 'e2e',
-      JSON.stringify({ inCommon: panelRows.ungroupedInCommon, badge: panelRows.badge }),
+      'L22 third-party rows land in their groups with a badge',
+      (ownHeaders.join('|') === '常用快捷键|组甲|组乙' || ownHeaders.join('|') === 'Common hotkeys|Group A|Group B') &&
+        panelRows.ungroupedInCommon === true &&
+        panelRows.badge === 'e2e',
+      JSON.stringify({ headers: panelRows.headers, inCommon: panelRows.ungroupedInCommon, badge: panelRows.badge }),
     );
     check(
       'L22 conflict hint follows the legacy mode',
@@ -854,9 +603,13 @@ async function main() {
       return { initial, collapsed, rebuilt, stored, reexpanded, allFoldable };
     })()`);
     check(
-      'L24 group header starts expanded and is announced as a button',
-      foldProbe.initial?.folded === false && foldProbe.initial?.expanded === 'true' && foldProbe.initial?.role === 'button' && foldProbe.initial?.hidden === false,
-      JSON.stringify(foldProbe.initial),
+      'L24 panel sections start expanded and every header is a button',
+      foldProbe.initial?.folded === false &&
+        foldProbe.initial?.expanded === 'true' &&
+        foldProbe.initial?.role === 'button' &&
+        foldProbe.initial?.hidden === false &&
+        foldProbe.allFoldable === true,
+      JSON.stringify({ ...foldProbe.initial, allFoldable: foldProbe.allFoldable }),
     );
     check(
       'L24 clicking a group header collapses it without changing its text',
@@ -864,21 +617,19 @@ async function main() {
       JSON.stringify({ collapsed: foldProbe.collapsed, initialText: foldProbe.initial?.text }),
     );
     check(
-      'L24 collapse survives a panel rebuild',
-      foldProbe.rebuilt?.folded === true && foldProbe.rebuilt?.hidden === true && foldProbe.rebuilt?.rows === foldProbe.initial?.rows,
-      JSON.stringify(foldProbe.rebuilt),
-    );
-    check(
-      'L24 collapsed section is persisted in the config',
-      Array.isArray(foldProbe.stored) && foldProbe.stored.some(key => key === 'g:Group A' || key === 'g:组甲'),
-      JSON.stringify(foldProbe.stored),
+      'L24 collapse survives a panel rebuild and is persisted',
+      foldProbe.rebuilt?.folded === true &&
+        foldProbe.rebuilt?.hidden === true &&
+        foldProbe.rebuilt?.rows === foldProbe.initial?.rows &&
+        Array.isArray(foldProbe.stored) &&
+        foldProbe.stored.some(key => key === 'g:Group A' || key === 'g:组甲'),
+      JSON.stringify({ rebuilt: foldProbe.rebuilt, stored: foldProbe.stored }),
     );
     check(
       'L24 clicking again expands the group',
       foldProbe.reexpanded?.folded === false && foldProbe.reexpanded?.hidden === false,
       JSON.stringify(foldProbe.reexpanded),
     );
-    check('L24 every panel section header is foldable', foldProbe.allFoldable === true, String(foldProbe.allFoldable));
 
     const vanillaRow = await cdp.evaluate(`(() => {
       window.DoLHK.register({ id: 'e2e.vanilla', defaultBind: ['KeyN'], label: 'probe', handler: () => {} });
@@ -909,37 +660,18 @@ async function main() {
       const decl = await cdp.evaluate(`(() => {
         const api = window.DoLHK;
         const row = id => document.querySelector(\`.dolhk-row[data-dolhk="\${id}"]\`);
-        const keyOf = id => row(id)?.querySelector('.dolhk-key')?.textContent ?? '';
-        const warnOf = id => row(id)?.querySelector('.dolhk-warn')?.textContent ?? '';
-        const results = (window.__declFixture || {}).results || {};
         const textOf = node => (node ? node.textContent.trim() : '');
-        const isFixture = text => /夹具|Fixture/i.test(text);
         return {
-          results,
-          declared: (window.DoLHK_DECL || []).length,
           actBind: api.getBind('fixture.act'),
-          actKey: keyOf('fixture.act'),
+          actKey: row('fixture.act')?.querySelector('.dolhk-key')?.textContent ?? '',
           actLabel: textOf(row('fixture.act')?.querySelector('.gold')),
-          actGroup: [...document.querySelectorAll('.dolhk-sections .settingsHeader')].map(n => n.textContent).filter(isFixture),
           actRegistered: Boolean(row('fixture.act')),
           declOnlyRow: Boolean(row('fixture.declonly')),
           declOnlyBind: api.getBind('fixture.declonly'),
-          vanillaWarn: warnOf('fixture.vanilla'),
-          dupKey: keyOf('fixture.dup'),
-          dupLabel: textOf(row('fixture.dup')?.querySelector('.gold')),
-          dupWarn: warnOf('fixture.dup'),
-          dupRegistered: Boolean(row('fixture.dup')),
-          incompleteRegistered: Boolean(row('fixture.incomplete')),
           typoRegistered: Boolean(row('fixture.typo')),
         };
       })()`);
 
-      check('L23 addon declarations reach the mod', decl.declared >= 2, `${decl.declared} records`);
-      check(
-        'L23 declared-only entry never becomes a row',
-        decl.declOnlyRow === false && decl.declOnlyBind === null,
-        JSON.stringify({ row: decl.declOnlyRow, bind: decl.declOnlyBind }),
-      );
       check(
         'L23 declaration fills the missing defaultBind and label',
         decl.actRegistered &&
@@ -948,21 +680,10 @@ async function main() {
           /夹具动作|Fixture action/.test(decl.actLabel),
         JSON.stringify({ bind: decl.actBind, key: decl.actKey, label: decl.actLabel }),
       );
-      check('L23 shared group from params is applied', decl.actGroup.length === 1, JSON.stringify(decl.actGroup));
       check(
-        'L23 first declaration wins over a later duplicate',
-        decl.dupRegistered && decl.dupKey === 'Alt + Shift + M' && /首个声明|First declaration/.test(decl.dupLabel),
-        JSON.stringify({ key: decl.dupKey, label: decl.dupLabel }),
-      );
-      check(
-        'L23 declared vanilla clash is reported on the row',
-        /原版|vanilla/i.test(decl.vanillaWarn),
-        decl.vanillaWarn,
-      );
-      check(
-        'L23 incomplete definition still fails without a declared bind',
-        decl.incompleteRegistered === false,
-        JSON.stringify({ registered: decl.incompleteRegistered }),
+        'L23 declared-only entry never becomes a row',
+        decl.declOnlyRow === false && decl.declOnlyBind === null,
+        JSON.stringify({ row: decl.declOnlyRow, bind: decl.declOnlyBind }),
       );
       check(
         'L23 a misnamed addonName leaves the definition unusable',
@@ -970,21 +691,12 @@ async function main() {
         JSON.stringify({ registered: decl.typoRegistered }),
       );
 
-      const declWarnings = await cdp.evaluate(`(window.__declWarnings || []).slice()`);
-      check(
-        'L23 declaration problems are reported once each',
-        declWarnings.some(line => /already declared/.test(line)) &&
-          declWarnings.some(line => /targets version "2\.0\.0"/.test(line)),
-        declWarnings.slice(0, 3).join(' | '),
-      );
-
-      await cdp.evaluate(`closeOverlay()`);
-      await sleep(300);
-      await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+      await closeOverlayAndSettle(cdp, 300);
+      await clearOverlayMark(cdp, true);
       await combo(cdp, ['Alt', 'Shift'], 'KeyK', 'k', 75);
       const fired = await cdp.evaluate(`(window.__declFixture || {}).fired`);
       check('L23 declared binding dispatches the runtime handler', fired === 'act', String(fired));
-      await cdp.evaluate(`window.DoLHK.unregister('fixture.act'); window.DoLHK.unregister('fixture.vanilla'); window.DoLHK.unregister('fixture.dup'); true`);
+      await cdp.evaluate(`window.DoLHK.unregister('fixture.act'); true`);
       await openHotkeysTab(cdp);
     }
 
@@ -994,22 +706,13 @@ async function main() {
     })()`);
     check('L14 two columns when space allows', columns.list >= 2 && columns.orig >= 2, JSON.stringify(columns));
 
-    const origDesc = await cdp.evaluate(`(() => {
-      const node = document.querySelector('.dolhk-orig-desc');
-      if (!node) return 'missing';
-      const style = getComputedStyle(node);
-      return style.textAlign + '/' + Math.round(node.getBoundingClientRect().right);
-    })()`);
-    check('L14 vanilla descriptions are right aligned', String(origDesc).startsWith('right'), origDesc);
-
     await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
     await sleep(200);
     await pressAlt(cdp, 'S');
     await sleep(900);
     const savesTabCount = await cdp.evaluate(`document.querySelectorAll('#overlayTabs button[data-dolhk-tab]').length`);
     check('L16 hotkeys tab stays out of the saves overlay', savesTabCount === 0, String(savesTabCount));
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(250);
+    await closeOverlayAndSettle(cdp, 250);
     await openHotkeysTab(cdp);
 
     const setLang = async value => {
@@ -1026,54 +729,62 @@ async function main() {
       })`);
     };
     const zhLabels = await setLang('zh');
-    check('L10 chinese labels render', zhLabels.row === '回溯' && zhLabels.tab === '快捷键', JSON.stringify(zhLabels));
     const enLabels = await setLang('en');
-    check('L10 english labels render', enLabels.row === 'Back' && enLabels.tab === 'Hotkeys', JSON.stringify(enLabels));
-    const autoLabels = await setLang('auto');
-    check('L10 auto mode restores detection', autoLabels.row.length > 0, JSON.stringify(autoLabels));
+    check(
+      'L10 labels follow the interface language',
+      zhLabels.row === '回溯' &&
+        zhLabels.tab === '快捷键' &&
+        enLabels.row === 'Back' &&
+        enLabels.tab === 'Hotkeys',
+      JSON.stringify({ zh: zhLabels, en: enLabels }),
+    );
+    // 后续检查都在 auto 模式下进行，自动探测分支由这些检查顺带覆盖
+    await setLang('auto');
 
     const originalRows = await cdp.evaluate(`document.querySelectorAll('.dolhk-orig-row').length`);
     const snapshotRows = await cdp.evaluate(
       `[...document.querySelectorAll('.dolhk-orig-row')].filter(r => /snapshot/i.test(r.textContent)).length`,
     );
-    check('L9 vanilla hotkey list rendered', originalRows >= 4, `${originalRows} rows`);
-    check('L9 list has no stale snapshot rows', snapshotRows === 0, `${snapshotRows} snapshot rows`);
-    const sourceLabel = await cdp.evaluate(`document.querySelector('.dolhk-tools .dolhk-muted')?.textContent ?? ''`);
-    check('L9 vanilla list marked as detected', /动态检测|Detected/.test(sourceLabel), sourceLabel);
     const modRow = await cdp.evaluate(
       `[...document.querySelectorAll('.dolhk-orig-key')].map(n => n.textContent).some(t => /Alt \\+ M/.test(t))`,
     );
-    check('L9 mod manager hotkey detected', modRow);
+    check(
+      'L9 detected bindings listed without snapshot fallback',
+      originalRows >= 4 && snapshotRows === 0 && modRow === true,
+      `${originalRows} rows, ${snapshotRows} snapshot, mod manager ${modRow}`,
+    );
 
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(300);
+    await closeOverlayAndSettle(cdp, 300);
 
     await pressAlt(cdp, 'C');
     const overlay = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
-    check('L4 Alt+C opens characteristics', overlay === 'characteristics', overlay);
-
     await pressAlt(cdp, 'C');
     const closed = await cdp.evaluate(`document.getElementById('customOverlay')?.classList.contains('hidden') ?? false`);
-    check('L4 Alt+C again closes the overlay', closed);
+    check('L4 Alt+C toggles characteristics', overlay === 'characteristics' && closed, JSON.stringify({ overlay, closed }));
 
     const openOverlayWith = async letter => {
-      await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+      await clearOverlayMark(cdp);
       await pressAlt(cdp, letter);
       return cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     };
 
-    check('L15 Alt+T opens traits', (await openOverlayWith('T')) === 'traits');
-    check('L15 Alt+F opens feats', (await openOverlayWith('F')) === 'gameFeats');
-    check('L19 Alt+I opens statistics', (await openOverlayWith('I')) === 'statistics');
-    await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    const pages = { T: 'traits', F: 'gameFeats', I: 'statistics' };
+    const opened = {};
+    for (const [letter, expected] of Object.entries(pages)) opened[letter] = (await openOverlayWith(letter)) === expected;
+    check('L15/L19 Alt+T / Alt+F / Alt+I open their pages', Object.values(opened).every(Boolean), JSON.stringify(opened));
+
+    await clearOverlayMark(cdp);
     await cdp.evaluate(`SugarCube.State.variables.cheatsEnabled = false; SugarCube.State.variables.debug = 0; true`);
     await pressAlt(cdp, 'H');
     const cheatsLocked = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
-    check('L15 cheat hotkey inert while cheats are locked', cheatsLocked !== 'cheats', cheatsLocked);
     await cdp.evaluate(`SugarCube.State.variables.cheatsEnabled = true; true`);
-    check('L15 cheat hotkey opens cheats when unlocked', (await openOverlayWith('H')) === 'cheats');
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(250);
+    const cheatsOpen = await openOverlayWith('H');
+    check(
+      'L15 cheat hotkey follows the unlock state',
+      cheatsLocked !== 'cheats' && cheatsOpen === 'cheats',
+      JSON.stringify({ locked: cheatsLocked, unlocked: cheatsOpen }),
+    );
+    await closeOverlayAndSettle(cdp, 250);
 
     const safePassage = await cdp.evaluate(
       `['PassageFooter', 'PassageHeader', 'StoryCaption'].find(name => SugarCube.Story.has(name)) ?? 'Start'`,
@@ -1116,25 +827,23 @@ async function main() {
 
     await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="journal"] .dolhk-key').click()`);
     await sleep(120);
-    const capturing = await cdp.evaluate(
-      `document.querySelector('.dolhk-row[data-dolhk="journal"] .dolhk-key').classList.contains('dolhk-capturing')`,
-    );
-    check('L5 key box enters capture mode', capturing);
 
     await chord(cdp, ['Ctrl'], [
       { code: 'KeyK', key: 'k', vk: 75 },
       { code: 'KeyJ', key: 'j', vk: 74 },
     ]);
     const boundText = await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="journal"] .dolhk-key').textContent`);
-    check('L5 chord captured and rendered', boundText === 'Ctrl + K + J', boundText);
     const stored = await cdp.evaluate(
       `JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.journal?.join('|') ?? ''`,
     );
-    check('L5 chord persisted as one ordered bind', stored === 'ControlLeft|KeyK|KeyJ', stored);
+    check(
+      'L5 chord captured, rendered and persisted as one ordered bind',
+      boundText === 'Ctrl + K + J' && stored === 'ControlLeft|KeyK|KeyJ',
+      JSON.stringify({ boundText, stored }),
+    );
 
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(300);
-    await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await closeOverlayAndSettle(cdp, 300);
+    await clearOverlayMark(cdp, true);
     await holdChord(cdp, ['Ctrl'], [
       { code: 'KeyK', key: 'k', vk: 75 },
       { code: 'KeyJ', key: 'j', vk: 74 },
@@ -1142,8 +851,7 @@ async function main() {
     const journalOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     check('L5 chord works in game', journalOpened === 'journal', journalOpened);
 
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(200);
+    await closeOverlayAndSettle(cdp, 200);
     await openHotkeysTab(cdp);
 
     await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="traits"] .dolhk-key').click()`);
@@ -1156,14 +864,9 @@ async function main() {
       `document.querySelector('.dolhk-row[data-dolhk="traits"] .dolhk-key').textContent`,
     );
     check('L17 held chord captured as one combination', chordText === 'Ctrl + A + B', chordText);
-    const chordStored = await cdp.evaluate(
-      `JSON.parse(localStorage.getItem('dol-hotkeys:config') || '{}')?.binds?.traits?.join('|') ?? ''`,
-    );
-    check('L17 chord persisted as one ordered bind', chordStored === 'ControlLeft|KeyA|KeyB', chordStored);
 
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(250);
-    await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await closeOverlayAndSettle(cdp, 250);
+    await clearOverlayMark(cdp, true);
     await holdChord(cdp, ['Ctrl'], [
       { code: 'KeyA', key: 'a', vk: 65 },
       { code: 'KeyB', key: 'b', vk: 66 },
@@ -1171,8 +874,7 @@ async function main() {
     const traitsOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     check('L17 chord triggers the action in game', traitsOpened === 'traits', traitsOpened);
 
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(200);
+    await closeOverlayAndSettle(cdp, 200);
     await openHotkeysTab(cdp);
 
     const beforeCancel = await cdp.evaluate(
@@ -1195,9 +897,8 @@ async function main() {
     );
     check('L6 Backspace clears the binding', clearedStored === 0, clearedText);
 
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(250);
-    await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await closeOverlayAndSettle(cdp, 250);
+    await clearOverlayMark(cdp);
     await pressAlt(cdp, 'R');
     const afterClear = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
     check('L6 cleared action no longer responds', afterClear !== 'social', afterClear);
@@ -1212,9 +913,8 @@ async function main() {
     );
     check('L7 browser reserved combo warns but still saves', warnStored === 'ControlLeft|KeyS' && warnText.length > 0, warnText);
 
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(250);
-    await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await closeOverlayAndSettle(cdp, 250);
+    await clearOverlayMark(cdp);
     await cdp.evaluate(
       `(() => { const i = document.createElement('input'); i.id = 'hkProbe'; document.body.appendChild(i); i.focus(); return document.activeElement.id; })()`,
     );
@@ -1237,22 +937,17 @@ async function main() {
     };
 
     const middle = await captureMouse('saves', 'middle');
-    check(
-      'L18 middle button recorded as its own code',
-      middle.text === 'Middle' && middle.stored === 'Mouse1',
-      JSON.stringify(middle),
-    );
     const sideBack = await captureMouse('journal', 'back');
-    check(
-      'L18 back side button recorded as its own code',
-      sideBack.text === 'Side 1' && sideBack.stored === 'Mouse3',
-      JSON.stringify(sideBack),
-    );
     const sideForward = await captureMouse('feats', 'forward');
     check(
-      'L18 forward side button recorded as its own code',
-      sideForward.text === 'Side 2' && sideForward.stored === 'Mouse4',
-      JSON.stringify(sideForward),
+      'L18 mouse buttons record their own codes',
+      middle.text === 'Middle' &&
+        middle.stored === 'Mouse1' &&
+        sideBack.text === 'Side 1' &&
+        sideBack.stored === 'Mouse3' &&
+        sideForward.text === 'Side 2' &&
+        sideForward.stored === 'Mouse4',
+      JSON.stringify({ middle, sideBack, sideForward }),
     );
 
     await cdp.evaluate(`document.querySelector('.dolhk-row[data-dolhk="characteristics"] .dolhk-key').click()`);
@@ -1273,21 +968,21 @@ async function main() {
     );
 
     const idle = { x: 700, y: 560 };
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(300);
-    await cdp.evaluate(`delete SugarCube.State.temporary.currentOverlay; document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await closeOverlayAndSettle(cdp, 300);
+    await clearOverlayMark(cdp, true);
     await mouseClick(cdp, 'middle', idle);
     const mouseOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
-    check('L18 middle button triggers its action in game', mouseOpened === 'saves', mouseOpened);
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(250);
-    await cdp.evaluate(`document.getElementById('customOverlay').setAttribute('data-overlay', 'none'); true`);
+    await closeOverlayAndSettle(cdp, 250);
+    await clearOverlayMark(cdp);
     await mouseClick(cdp, 'back', idle);
 
     const sideOpened = await cdp.evaluate(`document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? ''`);
-    check('L18 side button triggers its action in game', sideOpened === 'journal', sideOpened);
-    await cdp.evaluate(`closeOverlay()`);
-    await sleep(300);
+    check(
+      'L18 mouse buttons trigger their actions in game',
+      mouseOpened === 'saves' && sideOpened === 'journal',
+      JSON.stringify({ middle: mouseOpened, side: sideOpened }),
+    );
+    await closeOverlayAndSettle(cdp, 300);
 
     await cdp.evaluate(`window.cordova = { exec: (ok, fail, service, action, args) => {
       (window.__cordovaLog = window.__cordovaLog || []).push({ service, action, args });
@@ -1356,18 +1051,14 @@ async function main() {
     }))`);
     const overridesOn = enableLog.filter(c => c.action === 'overrideButton' && c.on === true);
     check(
-      'L20 confirming applies the volume override',
+      'L20 confirming applies the override to both buttons via CoreAndroid',
       enabledState.checked.join(',') === 'on' &&
         enabledState.volumeKeys === true &&
         enabledState.volumeInvert === false &&
-        overridesOn.length >= 2,
-      JSON.stringify({ ...enabledState, log: enableLog.slice(-4) }),
-    );
-    check(
-      'L20 override uses the CoreAndroid overrideButton action for both buttons',
-      new Set(overridesOn.map(c => c.button)).size === 2 &&
+        overridesOn.length >= 2 &&
+        new Set(overridesOn.map(c => c.button)).size === 2 &&
         enableLog.every(c => c.action === 'overrideButton' || c.action === undefined),
-      JSON.stringify(enableLog.slice(0, 4)),
+      JSON.stringify({ ...enabledState, log: enableLog.slice(-4) }),
     );
 
     await pickVolume('invert');

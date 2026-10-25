@@ -1,21 +1,7 @@
 // 原版绑定冲突检测的单元测试
-import { mkdir } from 'node:fs/promises';
-import path from 'node:path';
-import { build } from 'esbuild';
+import { load, reporter } from './lib/unit.mjs';
 
-const root = path.resolve(import.meta.dirname, '..');
-const out = path.join(root, 'test-output', 'vanilla.mjs');
-
-await mkdir(path.dirname(out), { recursive: true });
-await build({
-  entryPoints: [path.join(root, 'src', 'host', 'vanilla.ts')],
-  bundle: true,
-  format: 'esm',
-  platform: 'neutral',
-  outfile: out,
-  logLevel: 'error',
-});
-
+// 必须在载入前放好观测数据：模块按此快照建表
 globalThis.window = {
   __DoLHKEarly: {
     bindings: [{ keys: 'z n', combos: ['z', 'n'], src: '' }],
@@ -24,13 +10,8 @@ globalThis.window = {
   },
 };
 
-const v = await import(`file://${out}`);
-
-let failed = 0;
-function check(name, ok) {
-  if (!ok) failed++;
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`);
-}
+const v = await load('host/vanilla.ts', 'vanilla');
+const { check, finish } = reporter();
 
 const reserved = v.reservedBinds();
 const keys = reserved.map(item => item.key);
@@ -46,5 +27,4 @@ check('modifier family still matches', Boolean(v.clashOf(['AltRight', 'KeyM'])))
 check('localized label', v.labelOfReserved(reserved.find(item => item.key === 'KeyN'), 'zh').includes('继续'));
 check('english label', v.labelOfReserved(reserved.find(item => item.key === 'KeyN'), 'en').includes('continue'));
 
-console.log(failed === 0 ? '\nvanilla: all checks passed' : `\nvanilla: ${failed} check(s) failed`);
-process.exit(failed === 0 ? 0 : 1);
+finish('vanilla');

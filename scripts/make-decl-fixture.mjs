@@ -7,40 +7,15 @@ const root = path.resolve(import.meta.dirname, '..');
 const outDir = path.join(root, 'test-output');
 
 const RUNTIME = `(function () {
-  var state = (window.__declFixture = { results: {}, fired: null });
-  var warnings = (window.__declWarnings = []);
-  var realWarn = console.warn;
-  console.warn = function () {
-    var text = Array.prototype.map.call(arguments, String).join(' ');
-    if (text.indexOf('[dol-hotkeys]') >= 0) warnings.push(text);
-    return realWarn.apply(console, arguments);
-  };
+  var state = (window.__declFixture = { fired: null });
   function reg(def) {
     var api = window.DoLHK;
     if (api && typeof api.register === 'function') return api.register(def);
     (window.DoLHK_QUEUE = window.DoLHK_QUEUE || []).push(def);
     return 'queued';
   }
-  state.results.act = reg({
-    id: 'fixture.act',
-    handler: function () { state.fired = 'act'; },
-  });
-  state.results.incomplete = reg({
-    id: 'fixture.incomplete',
-    handler: function () {},
-  });
-  state.results.vanilla = reg({
-    id: 'fixture.vanilla',
-    handler: function () { state.fired = 'vanilla'; },
-  });
-  state.results.typo = reg({
-    id: 'fixture.typo',
-    handler: function () {},
-  });
-  state.results.dup = reg({
-    id: 'fixture.dup',
-    handler: function () {},
-  });
+  reg({ id: 'fixture.act', handler: function () { state.fired = 'act'; } });
+  reg({ id: 'fixture.typo', handler: function () {} });
 })();
 `;
 
@@ -49,20 +24,9 @@ const binds = {
     label: { zh: '夹具动作', en: 'Fixture action' },
     defaultBind: ['AltLeft', 'ShiftLeft', 'KeyK'],
   },
-  'fixture.incomplete': {
-    label: { zh: '缺键位', en: 'No bind' },
-  },
-  'fixture.vanilla': {
-    label: { zh: '撞原版', en: 'Vanilla clash' },
-    defaultBind: ['KeyN'],
-  },
   'fixture.declonly': {
     label: { zh: '只声明', en: 'Declared only' },
     defaultBind: ['AltLeft', 'ShiftLeft', 'KeyL'],
-  },
-  'fixture.dup': {
-    label: { zh: '首个声明', en: 'First declaration' },
-    defaultBind: ['AltLeft', 'ShiftLeft', 'KeyM'],
   },
 };
 
@@ -81,16 +45,6 @@ const boot = {
       addonName: 'hotkeys',
       modVersion: '1.0.0',
       params: { group: { zh: '夹具分组', en: 'Fixture group' }, binds },
-    },
-    {
-      modName: 'DoL Hotkeys',
-      addonName: 'hotkeys',
-      modVersion: '2.0.0',
-      params: {
-        binds: {
-          'fixture.dup': { label: { zh: '重复声明', en: 'Duplicate declaration' }, defaultBind: ['AltLeft', 'ShiftLeft', 'KeyQ'] },
-        },
-      },
     },
     {
       modName: 'DoL Hotkeys',

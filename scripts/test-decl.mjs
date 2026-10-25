@@ -1,33 +1,17 @@
 // addon 声明层的合并与诊断单元测试
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { build } from 'esbuild';
+import { load, reporter, root } from './lib/unit.mjs';
 
-const root = path.resolve(import.meta.dirname, '..');
 const dir = path.join(root, 'test-output');
 const entry = path.join(dir, 'decl-entry.ts');
-const out = path.join(dir, 'decl.mjs');
-
 await mkdir(dir, { recursive: true });
+// 声明层与注册表要一起载入：声明只在注册时被消费
 await writeFile(entry, "export * from '../src/data/decl';\nexport * from '../src/data/registry';\n");
-await build({
-  entryPoints: [entry],
-  bundle: true,
-  format: 'esm',
-  platform: 'neutral',
-  outfile: out,
-  logLevel: 'error',
-  define: { __DOLHK_VERSION__: JSON.stringify('1.0.2') },
-});
 
 globalThis.window = globalThis;
-const d = await import(`file://${out}`);
-
-let failed = 0;
-function check(name, ok) {
-  if (!ok) failed++;
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`);
-}
+const d = await load(entry, 'decl');
+const { check, finish } = reporter();
 
 const warnings = [];
 const realWarn = console.warn;
@@ -132,5 +116,4 @@ d.declarationCount();
 check('non-string modVersion warns', warnings.some(w => w.includes('non-string modVersion')));
 
 console.warn = realWarn;
-console.log(failed === 0 ? '\ndecl: all checks passed' : `\ndecl: ${failed} check(s) failed`);
-process.exit(failed === 0 ? 0 : 1);
+finish('decl');

@@ -1,36 +1,14 @@
 // 注册表校验与本地化解析的单元测试
-import { mkdir } from 'node:fs/promises';
-import path from 'node:path';
-import { build } from 'esbuild';
-
-const root = path.resolve(import.meta.dirname, '..');
-const out = path.join(root, 'test-output', 'registry.mjs');
-
-await mkdir(path.dirname(out), { recursive: true });
-await build({
-  entryPoints: [path.join(root, 'src', 'data', 'registry.ts')],
-  bundle: true,
-  format: 'esm',
-  platform: 'neutral',
-  outfile: out,
-  logLevel: 'error',
-  define: { __DOLHK_VERSION__: JSON.stringify('1.0.2') },
-});
+import { load, reporter } from './lib/unit.mjs';
 
 globalThis.window = globalThis;
-const r = await import(`file://${out}`);
+const r = await load('data/registry.ts', 'registry');
+const { check, finish } = reporter();
 
-let failed = 0;
-function check(name, ok) {
-  if (!ok) failed++;
-  console.log(`${ok ? 'PASS' : 'FAIL'} ${name}`);
-}
 const def = extra => ({ id: 'mymod.act', defaultBind: ['ControlLeft', 'KeyA'], handler: () => {}, ...extra });
 
-check('valid id', r.isValidId('mymod.act'));
-check('valid id with dash', r.isValidId('my-mod.act_1'));
-check('id without dot rejected', !r.isValidId('act'));
-check('id with empty segment rejected', !r.isValidId('a..b') && !r.isValidId('.a') && !r.isValidId('a.'));
+check('valid ids accepted', ['mymod.act', 'my-mod.act_1'].every(id => r.isValidId(id)));
+check('invalid id shapes rejected', ['act', 'a..b', '.a', 'a.'].every(id => !r.isValidId(id)));
 
 check('register structured bind', r.register(def()) === true);
 check('duplicate rejected', r.register(def()) === false);
@@ -58,5 +36,4 @@ check('group absent is null', r.groupOf(r.get('mousetrap.one'), 'zh') === null);
 r.register(def({ id: 'group.one', group: { zh: '我的模组', en: 'My Mod' } }));
 check('group resolved', r.groupOf(r.get('group.one'), 'zh') === '我的模组');
 
-console.log(failed === 0 ? '\nregistry: all checks passed' : `\nregistry: ${failed} check(s) failed`);
-process.exit(failed === 0 ? 0 : 1);
+finish('registry');
