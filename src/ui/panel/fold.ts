@@ -2,15 +2,15 @@ import { getConfig, setFolded } from '../../core/settings';
 import type { FoldHandlers } from './dom';
 
 /**
- * 分区标识。第三方组名由模组声明、可随语言变化，因此统一加 `g:` 前缀，
- * 与本模块自用的 `@` 命名空间隔离，避免同名冲突。
+ * 分区标识。第三方分组用 `g:<分组 id>`：id 稳定，切换界面语言时折叠状态不变；
+ * `@` 前缀留给本模块自用，两组命名空间互不干扰。
  */
 export const COMMON_KEY = '@common';
 export const ORIGINAL_KEY = '@original';
 export const SETTINGS_KEY = '@settings';
 
-export function groupKey(name: string): string {
-  return `g:${name}`;
+export function groupKey(id: string): string {
+  return `g:${id}`;
 }
 
 /** 折叠状态存于配置：面板每次重建（改键位、注册表变化）都能取回 */

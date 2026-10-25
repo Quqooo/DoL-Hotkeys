@@ -35,7 +35,7 @@ setup([
       label: { zh: '我的动作', en: 'My action' },
       tip: { zh: '会打开我的面板', en: 'Opens my panel' },
       defaultBind: ['ControlLeft', 'KeyG'],
-      group: { zh: '我的模组', en: 'My mod' },
+      group: { id: 'my.mod', label: { zh: '我的模组', en: 'My mod' } },
       priority: 5,
       inInput: true,
     },
@@ -46,7 +46,7 @@ const filled = d.withDeclaration({ id: 'my.act', handler: () => {} });
 check('label filled', filled.label.zh === '我的动作');
 check('tip filled', filled.tip.en === 'Opens my panel');
 check('defaultBind filled', JSON.stringify(filled.defaultBind) === '["ControlLeft","KeyG"]');
-check('group filled', filled.group.en === 'My mod');
+check('group filled', filled.group.id === 'my.mod' && filled.group.label.en === 'My mod');
 check('priority filled', filled.priority === 5);
 check('inInput filled', filled.inInput === true);
 
@@ -69,6 +69,10 @@ check('shared group applied', d.withDeclaration({ id: 'my.act', handler: () => {
 
 setup([decl({ 'my.act': { label: 'x', group: '自身组' } }, { group: '共享组' })]);
 check('entry group overrides shared group', d.withDeclaration({ id: 'my.act', handler: () => {} }).group === '自身组');
+
+setup([decl({ 'my.act': { label: 'x', group: { id: 'joined.group' } } })]);
+const joined = d.withDeclaration({ id: 'my.act', handler: () => {} }).group;
+check('group object without a label is kept as an id only', joined.id === 'joined.group' && joined.label === undefined);
 
 setup([decl({ 'my.act': { label: 'x', priority: '9', inInput: 'yes' } })]);
 const coerced = d.withDeclaration({ id: 'my.act', handler: () => {} });

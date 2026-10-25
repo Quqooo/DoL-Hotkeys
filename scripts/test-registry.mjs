@@ -32,9 +32,30 @@ check('function label', r.resolveLabel(lang => (lang === 'zh' ? '存档' : 'Save
 check('throwing label falls back to id', r.resolveLabel(() => { throw new Error('boom'); }, 'x.y', 'zh') === 'x.y');
 check('empty label falls back to id', r.resolveLabel({ zh: '   ' }, 'x.y', 'zh') === 'x.y');
 
-check('group absent is null', r.groupOf(r.get('mousetrap.one'), 'zh') === null);
-r.register(def({ id: 'group.one', group: { zh: '我的模组', en: 'My Mod' } }));
-check('group resolved', r.groupOf(r.get('group.one'), 'zh') === '我的模组');
+check('group absent is null', r.groupIdOf(r.get('mousetrap.one')) === null);
+r.register(def({ id: 'group.one', group: { id: 'shared.group', label: { zh: '我的模组', en: 'My Mod' } } }));
+check('group id kept as declared', r.groupIdOf(r.get('group.one')) === 'shared.group');
+check('group label follows the language', r.groupLabelOf('shared.group', 'zh') === '我的模组' && r.groupLabelOf('shared.group', 'en') === 'My Mod');
+
+r.register(def({ id: 'group.two', group: 'shared.group' }));
+check(
+  'string group joins by id and keeps the declared label',
+  r.groupIdOf(r.get('group.two')) === 'shared.group' && r.groupLabelOf('shared.group', 'zh') === '我的模组',
+);
+
+r.register(def({ id: 'group.three', group: 'plain' }));
+check('group id needs no namespace', r.groupIdOf(r.get('group.three')) === 'plain');
+check('group without any label falls back to id', r.groupLabelOf('plain', 'zh') === 'plain');
+
+r.register(def({ id: 'group.four', group: { id: 'plain', label: '后到的名字' } }));
+r.register(def({ id: 'group.five', group: { id: 'plain', label: '更晚的名字' } }));
+check('label comes from the earliest registration that provides one', r.groupLabelOf('plain', 'zh') === '后到的名字');
+r.unregister('group.four');
+r.unregister('group.five');
+check('label falls back to id once its provider is gone', r.groupLabelOf('plain', 'zh') === 'plain');
+
+r.register(def({ id: 'group.bad', group: { zh: '旧写法' } }));
+check('group without an id is ignored', r.groupIdOf(r.get('group.bad')) === null);
 
 r.register(def({ id: 'tip.one', tip: { zh: '会打开面板', en: 'Opens the panel' } }));
 check('tip resolved', r.tipOf(r.get('tip.one'), 'zh') === '会打开面板');

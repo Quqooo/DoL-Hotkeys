@@ -1,6 +1,6 @@
 import { isCapturing } from '../../runtime/capture';
 import { currentLang, invalidateLang, t } from '../i18n';
-import { groupOf, list as listRegistry, subscribe as subscribeRegistry } from '../../data/registry';
+import { groupIdOf, groupLabelOf, list as listRegistry, subscribe as subscribeRegistry } from '../../data/registry';
 import { getConfig } from '../../core/settings';
 import { ACTION_ORDER, type RegisteredHotkey } from '../../core/types';
 import { div, section } from './dom';
@@ -26,18 +26,18 @@ function applyWidth(): void {
   rootEl.classList.toggle('dolhk-wide', width >= WIDE_MIN);
 }
 
-/** 内置项按 ACTION_ORDER 排在前面，其余按分组归拢 */
-function groupEntries(entries: RegisteredHotkey[], lang: ReturnType<typeof currentLang>) {
+/** 内置项按 ACTION_ORDER 排在前面，其余按分组 id 归拢 */
+function groupEntries(entries: RegisteredHotkey[]) {
   const builtins = ACTION_ORDER.map(id => entries.find(entry => entry.id === id)).filter(
     (entry): entry is RegisteredHotkey => Boolean(entry),
   );
   const groups = new Map<string | null, RegisteredHotkey[]>();
   for (const entry of entries) {
     if (entry.builtin) continue;
-    const name = groupOf(entry, lang);
-    const bucket = groups.get(name);
+    const id = groupIdOf(entry);
+    const bucket = groups.get(id);
     if (bucket) bucket.push(entry);
-    else groups.set(name, [entry]);
+    else groups.set(id, [entry]);
   }
   return { builtins, groups };
 }
@@ -49,14 +49,18 @@ function paintRows(): void {
 
   const s = t();
   const all = listRegistry();
-  const { builtins, groups } = groupEntries(all, currentLang());
+  const { builtins, groups } = groupEntries(all);
+  const lang = currentLang();
 
   const common = [...builtins, ...(groups.get(null) ?? [])];
   if (common.length) listEl.append(buildSection(s.mine, common, paintRows, COMMON_KEY));
 
-  for (const [name, entries] of groups) {
-    if (name === null) continue;
-    listEl.append(buildSection(name, entries, paintRows, groupKey(name)));
+  // 组顺序与注册顺序无关：按组 id 升序，保证同一份注册表在任何加载顺序下排版一致
+  const ids = [...groups.keys()]
+    .filter((id): id is string => id !== null)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const id of ids) {
+    listEl.append(buildSection(groupLabelOf(id, lang), groups.get(id) ?? [], paintRows, groupKey(id)));
   }
 
   repaintWarnings();

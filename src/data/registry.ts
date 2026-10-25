@@ -1,11 +1,12 @@
 import { withDeclaration } from './decl';
 import { normalizeBind, parseMousetrap } from '../core/keys';
 import { getConfig } from '../core/settings';
-import { ACTION_ORDER, type ActionId, type Bind, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from '../core/types';
+import { ACTION_ORDER, type ActionId, type Bind, type GroupDecl, type GroupRef, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from '../core/types';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
 const MAX_LABEL = 80;
 const MAX_TIP = 240;
+const MAX_GROUP_ID = 64;
 
 const entries = new Map<string, RegisteredHotkey>();
 const listeners = new Set<() => void>();
@@ -42,6 +43,30 @@ export function isValidId(id: string): boolean {
 function toBind(input: HotkeyDefInput['defaultBind']): Bind | null {
   if (typeof input === 'string') return parseMousetrap(input);
   return normalizeBind(input);
+}
+
+/**
+ * 分组引用归一。字符串视为只有 id 的写法，id 不要求命名空间，
+ * 因此任何模组都能用同一个 id 加入别的模组创建的分组。
+ */
+function toGroup(raw: GroupRef | undefined, id: string): GroupDecl | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === 'string') {
+    const groupId = raw.trim().slice(0, MAX_GROUP_ID);
+    if (groupId) return { id: groupId };
+    warn(`group of "${id}" is empty and ignored`);
+    return undefined;
+  }
+  if (typeof raw !== 'object') {
+    warn(`group of "${id}" must be a string or { id, label }`);
+    return undefined;
+  }
+  const groupId = typeof raw.id === 'string' ? raw.id.trim().slice(0, MAX_GROUP_ID) : '';
+  if (!groupId) {
+    warn(`group of "${id}" needs a non-empty id`);
+    return undefined;
+  }
+  return raw.label === undefined ? { id: groupId } : { id: groupId, label: raw.label };
 }
 
 export function resolveLabel(text: LocalizedText | undefined, id: string, lang: Lang): string {
@@ -109,7 +134,7 @@ function store(input: HotkeyDefInput, id: string, bind: Bind, builtin: boolean):
     label: input.label ?? id,
     tip: input.tip,
     defaultBind: bind,
-    group: input.group,
+    group: toGroup(input.group, id),
     available: typeof input.available === 'function' ? input.available : () => true,
     priority: typeof input.priority === 'number' && Number.isFinite(input.priority) ? input.priority : 0,
     inInput: input.inInput === true,
@@ -141,10 +166,37 @@ export function labelOf(entry: RegisteredHotkey, lang: Lang): string {
   return resolveLabel(entry.label, entry.id, lang).slice(0, MAX_LABEL);
 }
 
-export function groupOf(entry: RegisteredHotkey, lang: Lang): string | null {
-  if (entry.group === undefined) return null;
-  const text = resolveLabel(entry.group, entry.id, lang);
-  return text === entry.id ? null : text.slice(0, MAX_LABEL);
+/** 分组 id；未分组返回 null（归入默认区） */
+export function groupIdOf(entry: RegisteredHotkey): string | null {
+  return entry.group?.id ?? null;
+}
+
+let labelRev = -1;
+let labelSources = new Map<string, LocalizedText>();
+
+/**
+ * 分组显示名来源：按注册顺序取最早给出 label 的那一项。
+ * 后来的模组只写 id 也能加入同一分组，名称沿用先注册者。
+ */
+function labelSourceOf(groupId: string): LocalizedText | undefined {
+  if (labelRev !== rev) {
+    labelRev = rev;
+    labelSources = new Map();
+    // Map 的迭代顺序即注册顺序
+    for (const entry of entries.values()) {
+      const group = entry.group;
+      if (!group || group.label === undefined) continue;
+      if (!labelSources.has(group.id)) labelSources.set(group.id, group.label);
+    }
+  }
+  return labelSources.get(groupId);
+}
+
+/** 分组标题：没有任何注册项给出 label 时回退到 id */
+export function groupLabelOf(groupId: string, lang: Lang): string {
+  const source = labelSourceOf(groupId);
+  if (source === undefined) return groupId;
+  return resolveLabel(source, groupId, lang).slice(0, MAX_LABEL);
 }
 
 /** 说明文字；未提供或解析不出内容时返回 null，行上就不加 (?) */

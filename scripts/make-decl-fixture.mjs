@@ -15,6 +15,7 @@ const RUNTIME = `(function () {
     return 'queued';
   }
   reg({ id: 'fixture.act', handler: function () { state.fired = 'act'; } });
+  reg({ id: 'fixture.join', handler: function () { state.fired = 'join'; } });
   reg({ id: 'fixture.typo', handler: function () {} });
 })();
 `;
@@ -28,6 +29,15 @@ const binds = {
   'fixture.declonly': {
     label: { zh: '只声明', en: 'Declared only' },
     defaultBind: ['AltLeft', 'ShiftLeft', 'KeyL'],
+  },
+};
+
+// 第二条声明只写组 id，用来验证「加入别的声明创建的分组」
+const joining = {
+  'fixture.join': {
+    label: { zh: '入组动作', en: 'Joined action' },
+    defaultBind: ['AltLeft', 'ShiftLeft', 'KeyJ'],
+    group: 'fixture.shared',
   },
 };
 
@@ -45,7 +55,13 @@ const boot = {
       modName: 'DoL Hotkeys',
       addonName: 'hotkeys',
       modVersion: '1.0.0',
-      params: { group: { zh: '夹具分组', en: 'Fixture group' }, binds },
+      params: { group: { id: 'fixture.shared', label: { zh: '夹具分组', en: 'Fixture group' } }, binds },
+    },
+    {
+      modName: 'DoL Hotkeys',
+      addonName: 'hotkeys',
+      modVersion: '1.0.0',
+      params: { binds: joining },
     },
     {
       modName: 'DoL Hotkeys',

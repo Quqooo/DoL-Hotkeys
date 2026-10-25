@@ -57,6 +57,17 @@ export type ConflictMode = 'legacy' | 'all' | 'first';
 
 export type LocalizedText = string | { zh?: string; en?: string } | ((lang: Lang) => string);
 
+/**
+ * 分组：稳定 id + 可选显示名。
+ * 字符串写法等价于只给 id，显示名回退到 id 本身。
+ */
+export interface GroupDecl {
+  id: string;
+  label?: LocalizedText;
+}
+
+export type GroupRef = string | GroupDecl;
+
 export interface HotkeyContext {
   id: string;
   event: Event;
@@ -71,7 +82,8 @@ export interface HotkeyDefInput {
   tip?: LocalizedText;
   /** 结构化 Bind，或可无歧义解析的 Mousetrap 单组合串 */
   defaultBind?: Bind | string;
-  group?: LocalizedText;
+  /** 分组：`id` 或 `{ id, label }`；同 id 的条目归入同一分组 */
+  group?: GroupRef;
   available?: () => boolean;
   priority?: number;
   inInput?: boolean;
@@ -83,7 +95,7 @@ export interface RegisteredHotkey {
   label: LocalizedText;
   tip?: LocalizedText;
   defaultBind: Bind;
-  group?: LocalizedText;
+  group?: GroupDecl;
   available: () => boolean;
   priority: number;
   inInput: boolean;

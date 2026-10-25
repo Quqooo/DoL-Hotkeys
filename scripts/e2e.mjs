@@ -1,5 +1,6 @@
 // 端到端回归：真实游戏 + 真实模组包，覆盖派发、录制、面板与原版检测
 // 用法：node scripts/e2e.mjs
+// 目标版本：0.5.12.13（主线）；0.4.2.7 与 0.5.0.5（次要）。其余版本不要求回归。
 // 环境变量：
 //   HK_GAME_HTML / HK_IMAGE_DIR  换游戏版本
 //   HK_SHOT / HK_SHOT_LANG / HK_SHOT_FOLD / HK_SHOT_HINT  结束时截图，并指定语言、收起的分区、悬停的 (?)
@@ -542,28 +543,51 @@ async function main() {
       const api = window.DoLHK;
       const make = (id, group, bind) => ({ id, group, defaultBind: bind, label: id, handler: () => {} });
       api.register(make('e2e.ungrouped', undefined, ['AltLeft', 'KeyY']));
-      api.register(make('e2e.groupA', { zh: '组甲', en: 'Group A' }, ['AltLeft', 'KeyU']));
-      api.register(make('e2e.groupB', { zh: '组乙', en: 'Group B' }, ['AltLeft', 'KeyO']));
+      api.register(make('e2e.groupA', { id: 'e2e.g', label: { zh: '组甲', en: 'Group A' } }, ['AltLeft', 'KeyU']));
+      api.register(make('e2e.groupB', { id: 'e2e.g', label: { zh: '组乙', en: 'Group B' } }, ['AltLeft', 'KeyO']));
+      // 只写组 id：后注册的条目加入前面创建的分组，不改变已有显示名
+      api.register(make('e2e.groupC', 'e2e.g', ['AltLeft', 'KeyB']));
+      // id 更小的组后注册，借它校验分区按 id 而非注册顺序排列
+      api.register(make('e2e.groupD', { id: 'e2e.a', label: { zh: '组丙', en: 'Group C' } }, ['AltLeft', 'KeyV']));
       const row = id => document.querySelector(\`.dolhk-row[data-dolhk="\${id}"]\`);
+      const sectionOf = id => row(id)?.closest('.settingsGrid') ?? null;
       const headers = [...document.querySelectorAll('.dolhk-sections .settingsHeader')].map(node => node.textContent);
       const badge = row('e2e.ungrouped')?.querySelector('.dolhk-badge')?.textContent ?? '';
       const dupText = row('e2e.groupB')?.querySelector('.dolhk-warn')?.textContent ?? '';
       const commonSection = document.querySelector('.dolhk-sections .settingsGrid');
       const ungroupedInCommon = Boolean(commonSection?.querySelector('[data-dolhk="e2e.ungrouped"]'));
-      return { headers, badge, dupText, ungroupedInCommon };
+      const groupSection = sectionOf('e2e.groupA');
+      const joined = Boolean(groupSection) && sectionOf('e2e.groupB') === groupSection && sectionOf('e2e.groupC') === groupSection;
+      const allHeaders = [...document.querySelectorAll('.dolhk .settingsHeader')].map(node => node.textContent);
+      return { headers, badge, dupText, ungroupedInCommon, joined, allHeaders };
     })()`);
     const ownHeaders = panelRows.headers.filter(text => !/夹具|Fixture/.test(text));
     check(
-      'L22 third-party rows land in their groups with a badge',
-      (ownHeaders.join('|') === '常用快捷键|组甲|组乙' || ownHeaders.join('|') === 'Common hotkeys|Group A|Group B') &&
+      'L22 groups are ordered by id and labelled by the first registration',
+      (ownHeaders.join('|') === '常用快捷键|组丙|组甲' || ownHeaders.join('|') === 'Common hotkeys|Group C|Group A') &&
+        panelRows.joined === true &&
         panelRows.ungroupedInCommon === true &&
         panelRows.badge === 'e2e',
-      JSON.stringify({ headers: panelRows.headers, inCommon: panelRows.ungroupedInCommon, badge: panelRows.badge }),
+      JSON.stringify({ headers: panelRows.headers, joined: panelRows.joined, inCommon: panelRows.ungroupedInCommon, badge: panelRows.badge }),
     );
     check(
       'L22 conflict hint follows the legacy mode',
       /仅执行靠前的一项|only the earlier entry runs/.test(panelRows.dupText),
       panelRows.dupText,
+    );
+
+    const order = panelRows.allHeaders;
+    const at = pattern => order.findIndex(text => pattern.test(text));
+    const commonAt = at(/常用快捷键|Common hotkeys/);
+    const originalAt = at(/原版快捷键|Vanilla hotkeys/);
+    const groupAt = order.map((text, index) => (/组甲|组丙|Group [AC]/.test(text) ? index : -1)).filter(index => index >= 0);
+    check(
+      'L22 sections run common > groups by id > vanilla > other',
+      commonAt === 0 &&
+        groupAt.length === 2 &&
+        groupAt.every(index => index > commonAt && index < originalAt) &&
+        originalAt === order.length - 2,
+      JSON.stringify(order),
     );
 
     const modeTip = await cdp.evaluate(`(() => {
@@ -632,7 +656,7 @@ async function main() {
         foldProbe.rebuilt?.hidden === true &&
         foldProbe.rebuilt?.rows === foldProbe.initial?.rows &&
         Array.isArray(foldProbe.stored) &&
-        foldProbe.stored.some(key => key === 'g:Group A' || key === 'g:组甲'),
+        foldProbe.stored.some(key => key === 'g:e2e.g'),
       JSON.stringify({ rebuilt: foldProbe.rebuilt, stored: foldProbe.stored }),
     );
     check(
@@ -653,7 +677,7 @@ async function main() {
     const removedRows = await cdp.evaluate(`(() => {
       const headers = () => [...document.querySelectorAll('.dolhk-sections .settingsHeader')].map(n => n.textContent);
       const before = headers();
-      for (const id of ['e2e.ungrouped', 'e2e.groupA', 'e2e.groupB']) window.DoLHK.unregister(id);
+      for (const id of ['e2e.ungrouped', 'e2e.groupA', 'e2e.groupB', 'e2e.groupC', 'e2e.groupD']) window.DoLHK.unregister(id);
       return {
         rows: document.querySelectorAll('.dolhk-row[data-dolhk^="e2e."]').length,
         before,
@@ -680,6 +704,9 @@ async function main() {
             return anchor ? { text: anchor.textContent, tip: anchor.getAttribute('tooltip') || '' } : null;
           })(),
           actRegistered: Boolean(row('fixture.act')),
+          joinRow: Boolean(row('fixture.join')),
+          joinedSection: Boolean(row('fixture.act')?.closest('.settingsGrid')) &&
+            row('fixture.act')?.closest('.settingsGrid') === row('fixture.join')?.closest('.settingsGrid'),
           declOnlyRow: Boolean(row('fixture.declonly')),
           declOnlyBind: api.getBind('fixture.declonly'),
           typoRegistered: Boolean(row('fixture.typo')),
@@ -695,6 +722,11 @@ async function main() {
           decl.actHint?.text.trim() === '(?)' &&
           /夹具说明|Fixture tip/.test(decl.actHint.tip),
         JSON.stringify({ bind: decl.actBind, key: decl.actKey, label: decl.actLabel, hint: decl.actHint }),
+      );
+      check(
+        'L23 a declaration joins a group by id alone',
+        decl.joinRow === true && decl.joinedSection === true,
+        JSON.stringify({ row: decl.joinRow, sameSection: decl.joinedSection }),
       );
       check(
         'L23 declared-only entry never becomes a row',

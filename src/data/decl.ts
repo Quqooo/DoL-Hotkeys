@@ -1,10 +1,10 @@
-import type { Bind, HotkeyDefInput, LocalizedText } from '../core/types';
+import type { Bind, GroupRef, HotkeyDefInput, LocalizedText } from '../core/types';
 
 interface DeclFields {
   label?: LocalizedText;
   tip?: LocalizedText;
   defaultBind?: Bind | string;
-  group?: LocalizedText;
+  group?: GroupRef;
   priority?: number;
   inInput?: boolean;
 }
@@ -12,7 +12,7 @@ interface DeclFields {
 interface DeclRecord {
   modName?: unknown;
   declaredVersion?: unknown;
-  params?: { group?: LocalizedText; binds?: Record<string, unknown> } | unknown;
+  params?: { group?: GroupRef; binds?: Record<string, unknown> } | unknown;
 }
 
 interface DeclEntry {
@@ -73,7 +73,8 @@ function pickFields(raw: unknown): { fields: DeclFields; ignored: string[] } {
       ignored.push(key);
       continue;
     }
-    if (key === 'label' || key === 'group' || key === 'tip') fields[key] = value as LocalizedText;
+    if (key === 'label' || key === 'tip') fields[key] = value as LocalizedText;
+    else if (key === 'group') fields.group = value as GroupRef;
     else if (key === 'defaultBind') fields.defaultBind = value as Bind | string;
     else if (key === 'priority' && typeof value === 'number' && Number.isFinite(value)) fields.priority = value;
     else if (key === 'inInput' && typeof value === 'boolean') fields.inInput = value;
@@ -96,7 +97,7 @@ export function rebuild(): void {
       once(`params:${modName}:${index}`, `declaration from "${modName}" has no params`);
       return;
     }
-    const sharedGroup = params.group as LocalizedText | undefined;
+    const sharedGroup = params.group as GroupRef | undefined;
     const binds = params.binds;
     if (!binds || typeof binds !== 'object') {
       once(`binds:${modName}:${index}`, `declaration from "${modName}" has no binds`);
