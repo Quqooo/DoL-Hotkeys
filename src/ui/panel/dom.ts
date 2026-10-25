@@ -21,9 +21,47 @@ export function button(className: string, text: string): HTMLButtonElement {
   return node;
 }
 
-/** 与原版设置一致的区块外壳：标题 + 内容网格 */
-export function section(title: string): HTMLDivElement {
+/** 折叠能力由调用方注入，dom 层不感知配置存储 */
+export interface FoldHandlers {
+  /** 初始是否收起 */
+  folded: boolean;
+  /** 用户点击后写回；面板重建时再从这里读 */
+  onToggle: (folded: boolean) => void;
+}
+
+/**
+ * 与原版设置一致的区块外壳：标题 + 内容网格。
+ * 传入 handlers 时标题成为可点击的折叠开关，状态落在容器的 class 上。
+ */
+export function section(title: string, handlers?: FoldHandlers): HTMLDivElement {
   const wrap = div('settingsGrid');
-  wrap.append(div('settingsHeader options', title));
+  const head = div('settingsHeader options', title);
+  wrap.append(head);
+  if (!handlers) return wrap;
+
+  head.classList.add('dolhk-fold');
+  head.setAttribute('role', 'button');
+  head.tabIndex = 0;
+
+  const paint = (folded: boolean): void => {
+    wrap.classList.toggle('dolhk-folded', folded);
+    head.setAttribute('aria-expanded', String(!folded));
+  };
+  const toggle = (): void => {
+    const next = !wrap.classList.contains('dolhk-folded');
+    paint(next);
+    handlers.onToggle(next);
+  };
+
+  head.addEventListener('click', toggle);
+  head.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    // 焦点在标题上时，热键派发（capture 阶段）可能已经消费掉这次按键
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggle();
+  });
+  paint(handlers.folded);
   return wrap;
 }

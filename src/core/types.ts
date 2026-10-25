@@ -99,4 +99,6 @@ export interface Config {
   binds: Record<string, Bind>;
   /** 曾注册过的第三方 id；缺席期间保留其键位 */
   external: string[];
+  /** 已收起的分区标识，见 ui/panel/fold.ts */
+  collapsed: string[];
 }

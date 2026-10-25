@@ -227,3 +227,23 @@
 	grid-column: 1 / -1;
 }
 
+/* 分区折叠：标题即按钮，悬停压暗背景提示可点 */
+.dolhk-fold {
+	cursor: pointer;
+	user-select: none;
+	transition: background-color 0.12s ease;
+}
+
+.dolhk-fold:hover {
+	background-color: rgba(0, 0, 0, 0.18);
+}
+
+.dolhk-fold:focus-visible {
+	outline: 1px solid var(--dolhk-accent);
+	outline-offset: -1px;
+}
+
+.dolhk-folded > :not(.settingsHeader) {
+	display: none;
+}
+

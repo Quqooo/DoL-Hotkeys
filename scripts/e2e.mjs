@@ -817,6 +817,69 @@ async function main() {
       panelRows.dupText,
     );
 
+    const foldProbe = await cdp.evaluate(`(() => {
+      const pick = () => [...document.querySelectorAll('.dolhk-sections .settingsHeader')]
+        .find(node => /组甲|Group A/.test(node.textContent));
+      const head = pick();
+      if (!head) return { skip: 'no group header' };
+      const read = node => {
+        const wrap = node.parentElement;
+        const list = wrap.querySelector('.dolhk-list');
+        return {
+          folded: wrap.classList.contains('dolhk-folded'),
+          expanded: node.getAttribute('aria-expanded'),
+          role: node.getAttribute('role'),
+          hidden: list ? getComputedStyle(list).display === 'none' : null,
+          text: node.textContent,
+          rows: wrap.querySelectorAll('.dolhk-row').length,
+        };
+      };
+      const initial = read(head);
+      head.click();
+      const collapsed = read(pick());
+      // 面板重建（注册表变化会整体重绘）之后应保持收起
+      window.DoLHK.register({ id: 'e2e.foldprobe', defaultBind: ['AltLeft', 'KeyG'], handler: () => {} });
+      window.DoLHK.unregister('e2e.foldprobe');
+      const rebuilt = read(pick());
+      let stored = null;
+      try {
+        stored = (JSON.parse(localStorage.getItem('dol-hotkeys:config')) || {}).collapsed || [];
+      } catch (error) {
+        stored = null;
+      }
+      pick().click();
+      const reexpanded = read(pick());
+      const allFoldable = [...document.querySelectorAll('.dolhk .settingsHeader')]
+        .every(node => node.getAttribute('role') === 'button');
+      return { initial, collapsed, rebuilt, stored, reexpanded, allFoldable };
+    })()`);
+    check(
+      'L24 group header starts expanded and is announced as a button',
+      foldProbe.initial?.folded === false && foldProbe.initial?.expanded === 'true' && foldProbe.initial?.role === 'button' && foldProbe.initial?.hidden === false,
+      JSON.stringify(foldProbe.initial),
+    );
+    check(
+      'L24 clicking a group header collapses it without changing its text',
+      foldProbe.collapsed?.folded === true && foldProbe.collapsed?.expanded === 'false' && foldProbe.collapsed?.hidden === true && foldProbe.collapsed?.text === foldProbe.initial?.text,
+      JSON.stringify({ collapsed: foldProbe.collapsed, initialText: foldProbe.initial?.text }),
+    );
+    check(
+      'L24 collapse survives a panel rebuild',
+      foldProbe.rebuilt?.folded === true && foldProbe.rebuilt?.hidden === true && foldProbe.rebuilt?.rows === foldProbe.initial?.rows,
+      JSON.stringify(foldProbe.rebuilt),
+    );
+    check(
+      'L24 collapsed section is persisted in the config',
+      Array.isArray(foldProbe.stored) && foldProbe.stored.some(key => key === 'g:Group A' || key === 'g:组甲'),
+      JSON.stringify(foldProbe.stored),
+    );
+    check(
+      'L24 clicking again expands the group',
+      foldProbe.reexpanded?.folded === false && foldProbe.reexpanded?.hidden === false,
+      JSON.stringify(foldProbe.reexpanded),
+    );
+    check('L24 every panel section header is foldable', foldProbe.allFoldable === true, String(foldProbe.allFoldable));
+
     const vanillaRow = await cdp.evaluate(`(() => {
       window.DoLHK.register({ id: 'e2e.vanilla', defaultBind: ['KeyN'], label: 'probe', handler: () => {} });
       const node = document.querySelector('.dolhk-row[data-dolhk="e2e.vanilla"] .dolhk-warn');
@@ -1398,6 +1461,18 @@ async function main() {
         return true;
       })()`);
       await sleep(500);
+    }
+
+    // HK_SHOT_FOLD=<标题前缀>：截图前收起该分区，用于人工核对折叠态样式
+    const shotFold = process.env.HK_SHOT_FOLD;
+    if (shotFold) {
+      await cdp.evaluate(`(() => {
+        const head = [...document.querySelectorAll('.dolhk .settingsHeader')]
+          .find(node => node.textContent.includes(${JSON.stringify(shotFold)}));
+        if (head && head.getAttribute('aria-expanded') === 'true') head.click();
+        return Boolean(head);
+      })()`);
+      await sleep(300);
     }
 
     const shotReady = await cdp.evaluate(`(() => {

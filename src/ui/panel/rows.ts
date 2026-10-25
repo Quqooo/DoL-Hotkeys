@@ -6,6 +6,7 @@ import { clashOf, labelOfReserved } from '../../host/vanilla';
 import { currentLang, t } from '../i18n';
 import type { ActionId, Bind, RegisteredHotkey } from '../../core/types';
 import { button, div, section, span } from './dom';
+import { foldHandlers } from './fold';
 
 const BROWSER_RESERVED: Bind[] = [
   ['ControlLeft', 'KeyS'],
@@ -166,8 +167,13 @@ function buildRow(entry: RegisteredHotkey, repaint: () => void): HTMLElement {
   return row;
 }
 
-export function buildSection(title: string, entries: RegisteredHotkey[], repaint: () => void): HTMLElement {
-  const wrap = section(title);
+export function buildSection(
+  title: string,
+  entries: RegisteredHotkey[],
+  repaint: () => void,
+  foldKey: string,
+): HTMLElement {
+  const wrap = section(title, foldHandlers(foldKey));
   const grid = div('dolhk-list');
   for (const entry of entries) grid.append(buildRow(entry, repaint));
   wrap.append(grid);

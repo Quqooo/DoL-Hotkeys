@@ -47,6 +47,7 @@ function defaults(): Config {
     conflictMode: 'legacy',
     binds: cloneDefaults(),
     external: [],
+    collapsed: [],
   };
 }
 
@@ -80,10 +81,11 @@ function readBinds(
   }
 }
 
-function readExternal(raw: unknown, target: Config): void {
-  if (!Array.isArray(raw)) return;
-  const ids = raw.filter((item): item is string => typeof item === 'string' && item.length > 0);
-  target.external = [...new Set(ids)];
+/** 读取字符串数组：剔除非法项并按首现去重 */
+function readStringList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const items = raw.filter((item): item is string => typeof item === 'string' && item.length > 0);
+  return [...new Set(items)];
 }
 
 export function getConfig(): Config {
@@ -114,7 +116,8 @@ function applyStored(parsed: Record<string, unknown>, config: Config): boolean {
   if (CONFLICT_MODES.includes(parsed.conflictMode as ConflictMode)) {
     config.conflictMode = parsed.conflictMode as ConflictMode;
   }
-  readExternal(parsed.external, config);
+  config.external = readStringList(parsed.external);
+  config.collapsed = readStringList(parsed.collapsed);
 
   const rawBinds = parsed.binds && typeof parsed.binds === 'object' ? (parsed.binds as Record<string, unknown>) : {};
   if (version >= 3) {
@@ -157,5 +160,14 @@ export function conflictMode(): ConflictMode {
 export function setConflictMode(mode: ConflictMode): void {
   const config = getConfig();
   config.conflictMode = mode;
+  saveConfig();
+}
+
+/** 折叠状态只影响面板观感，不参与派发，因此不递增 rev */
+export function setFolded(key: string, folded: boolean): void {
+  const config = getConfig();
+  const has = config.collapsed.includes(key);
+  if (has === folded) return;
+  config.collapsed = folded ? [...config.collapsed, key] : config.collapsed.filter(item => item !== key);
   saveConfig();
 }

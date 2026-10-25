@@ -4,6 +4,7 @@ import { groupOf, list as listRegistry, subscribe as subscribeRegistry } from '.
 import { getConfig } from '../../core/settings';
 import { ACTION_ORDER, type RegisteredHotkey } from '../../core/types';
 import { div, section } from './dom';
+import { COMMON_KEY, ORIGINAL_KEY, SETTINGS_KEY, foldHandlers, groupKey } from './fold';
 import { buildOriginal, paintOriginal, type OriginalView } from './original';
 import { buildSection, clearWarnings, repaintWarnings } from './rows';
 import { buildConflict, buildLanguage, buildVolume } from './settings';
@@ -51,11 +52,11 @@ function paintRows(): void {
   const { builtins, groups } = groupEntries(all, currentLang());
 
   const common = [...builtins, ...(groups.get(null) ?? [])];
-  if (common.length) listEl.append(buildSection(s.mine, common, paintRows));
+  if (common.length) listEl.append(buildSection(s.mine, common, paintRows, COMMON_KEY));
 
   for (const [name, entries] of groups) {
     if (name === null) continue;
-    listEl.append(buildSection(name, entries, paintRows));
+    listEl.append(buildSection(name, entries, paintRows, groupKey(name)));
   }
 
   repaintWarnings();
@@ -70,12 +71,12 @@ function build(): HTMLElement {
   listEl = div('dolhk-sections');
   root.append(listEl);
 
-  const original = section(s.original);
+  const original = section(s.original, foldHandlers(ORIGINAL_KEY));
   originalView = buildOriginal();
   original.append(originalView.body, originalView.tools);
   root.append(original);
 
-  const other = section(s.other);
+  const other = section(s.other, foldHandlers(SETTINGS_KEY));
   other.append(buildLanguage(config, remount), buildVolume(config), buildConflict(config, paintRows));
   root.append(other);
 
