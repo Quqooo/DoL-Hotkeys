@@ -571,8 +571,8 @@ async function main() {
       JSON.stringify({ headers: panelRows.headers, joined: panelRows.joined, inCommon: panelRows.ungroupedInCommon, badge: panelRows.badge }),
     );
     check(
-      'L22 conflict hint follows the legacy mode',
-      /仅执行靠前的一项|only the earlier entry runs/.test(panelRows.dupText),
+      'L22 conflict hint follows the default first mode',
+      /优先级最高的一项|highest priority one runs/.test(panelRows.dupText),
       panelRows.dupText,
     );
 
@@ -590,14 +590,18 @@ async function main() {
       JSON.stringify(order),
     );
 
-    const modeTip = await cdp.evaluate(`(() => {
-      const anchor = document.querySelector('.dolhk-radios .tooltip-anchor');
-      return anchor ? { text: anchor.textContent, tip: anchor.getAttribute('tooltip') || '' } : null;
+    const modeUi = await cdp.evaluate(`(() => {
+      const inputs = [...document.querySelectorAll('input[name="dolhk-conflict"]')];
+      return {
+        values: inputs.map(node => node.value),
+        checked: inputs.filter(node => node.checked).map(node => node.value),
+        hints: document.querySelectorAll('.dolhk-radios .tooltip-anchor').length,
+      };
     })()`);
     check(
-      'L22 legacy conflict mode carries a hint',
-      modeTip?.text.trim() === '(?)' && modeTip.tip.length > 0,
-      JSON.stringify(modeTip),
+      'L22 conflict mode defaults to first and lists two options',
+      modeUi.values.join(',') === 'first,all' && modeUi.checked.join(',') === 'first' && modeUi.hints === 0,
+      JSON.stringify(modeUi),
     );
 
     const foldProbe = await cdp.evaluate(`(() => {

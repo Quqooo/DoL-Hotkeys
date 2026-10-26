@@ -29,14 +29,11 @@ export interface Dict {
   warnDigit: string;
   warnBrowser: string;
   warnSide: string;
-  warnDup: (name: string) => string;
   warnDupAll: (name: string) => string;
   warnDupFirst: (name: string) => string;
   warnVanilla: (name: string) => string;
   conflict: string;
   conflictHint: string;
-  modeLegacy: string;
-  modeLegacyTip: string;
   modeAll: string;
   modeFirst: string;
   unavailable: string;
@@ -82,14 +79,11 @@ const zh: Dict = {
   warnDigit: '含数字键：与原版数字选链接重叠，可能一次触发两件事',
   warnBrowser: '浏览器可能优先处理该组合',
   warnSide: '未加修饰键的鼠标侧键：浏览器可能同时切换页面历史',
-  warnDup: name => `已被「${name}」使用，仅执行靠前的一项`,
-  warnDupAll: name => `已被「${name}」使用，两者会同时触发`,
-  warnDupFirst: name => `已被「${name}」使用，仅优先级最高者生效`,
+  warnDupAll: name => `与「${name}」重叠，全部触发`,
+  warnDupFirst: name => `与「${name}」重叠，只执行优先级最高的一项`,
   warnVanilla: name => `与${name}冲突`,
   conflict: '冲突处理',
-  conflictHint: '同一组合被多个功能占用时',
-  modeLegacy: '保持旧行为',
-  modeLegacyTip: '只执行排在最前的一项：内置动作按面板顺序，第三方按注册顺序；优先级在此模式下不参与排序。',
+  conflictHint: '多个动作共用同一组合时',
   modeAll: '全部触发',
   modeFirst: '仅触发一个',
   unavailable: '当前不可用',
@@ -147,16 +141,13 @@ const en: Dict = {
   warnDigit: 'Contains a digit: overlaps vanilla link numbering, may fire two actions at once',
   warnBrowser: 'The browser may handle this combination first',
   warnSide: 'Bare side button: the browser may also navigate its own history',
-  warnDup: name => `Already used by "${name}"; only the earlier entry runs`,
-  warnDupAll: name => `Already used by "${name}"; both will fire`,
-  warnDupFirst: name => `Already used by "${name}"; only the highest priority runs`,
+  warnDupAll: name => `Also used by "${name}". All of them run.`,
+  warnDupFirst: name => `Also used by "${name}". Only the highest priority one runs.`,
   warnVanilla: name => `Conflicts with ${name}`,
   conflict: 'Conflicts',
-  conflictHint: 'When one combination is used by several actions',
-  modeLegacy: 'Keep current behaviour',
-  modeLegacyTip: 'Only the first match runs: builtin actions in panel order, third-party ones in registration order. Priority does not affect the choice here.',
-  modeAll: 'Fire all',
-  modeFirst: 'Fire the first only',
+  conflictHint: 'Shortcut conflicts between actions',
+  modeAll: 'All',
+  modeFirst: 'First',
   unavailable: 'Unavailable now',
   names: {
     back: 'Back',

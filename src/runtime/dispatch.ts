@@ -72,16 +72,6 @@ export function dispatch(held: Bind, event: Event, inputBlocked = false): string
 
   const mode = conflictMode();
 
-  // legacy 忽略 priority，按「内置 ACTION_ORDER → 第三方注册顺序」取首个
-  if (mode === 'legacy') {
-    let chosen = matches[0];
-    for (const item of matches) {
-      if (rankOf(item.entry) < rankOf(chosen.entry)) chosen = item;
-    }
-    run(chosen, event);
-    return chosen.entry.id;
-  }
-
   if (mode === 'all') {
     for (const item of matches) run(item, event);
     return matches[0].entry.id;

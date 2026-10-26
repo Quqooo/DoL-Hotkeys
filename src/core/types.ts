@@ -53,7 +53,7 @@ export type LangMode = 'auto' | Lang;
 /** 有序组合（`KeyboardEvent.code` / `MouseN`）；顺序即按下顺序，不做重排归一 */
 export type Bind = string[];
 
-export type ConflictMode = 'legacy' | 'all' | 'first';
+export type ConflictMode = 'first' | 'all';
 
 export type LocalizedText = string | { zh?: string; en?: string } | ((lang: Lang) => string);
 

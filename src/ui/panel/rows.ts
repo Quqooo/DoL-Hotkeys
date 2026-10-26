@@ -74,7 +74,7 @@ function paintWarnings(id: string, bind: Bind, occupancy: Occupancy): void {
   if (duplicateId) {
     const duplicate = getEntry(duplicateId);
     const mode = getConfig().conflictMode;
-    const text = mode === 'all' ? s.warnDupAll : mode === 'first' ? s.warnDupFirst : s.warnDup;
+    const text = mode === 'all' ? s.warnDupAll : s.warnDupFirst;
     if (duplicate) messages.push(text(labelOf(duplicate, lang)));
   }
   if (bindHasDigit(bind)) messages.push(s.warnDigit);

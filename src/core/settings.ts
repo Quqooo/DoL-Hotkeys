@@ -30,7 +30,7 @@ const V2_DEFAULTS: Partial<Record<ActionId, string[]>> = {
   forward: ['Ctrl+KeyX'],
 };
 
-const CONFLICT_MODES: readonly ConflictMode[] = ['legacy', 'all', 'first'];
+const CONFLICT_MODES: readonly ConflictMode[] = ['first', 'all'];
 
 function cloneDefaults(): Record<string, Bind> {
   const binds: Record<string, Bind> = {};
@@ -44,7 +44,7 @@ function defaults(): Config {
     lang: 'auto',
     volumeKeys: false,
     volumeInvert: false,
-    conflictMode: 'legacy',
+    conflictMode: 'first',
     binds: cloneDefaults(),
     external: [],
     collapsed: [],
