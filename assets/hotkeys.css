@@ -119,6 +119,11 @@
 	opacity: 0.85;
 }
 
+.dolhk-bind-control button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
 .dolhk-orig {
 	grid-column: 1 / -1;
 	display: grid;

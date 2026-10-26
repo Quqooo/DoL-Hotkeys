@@ -1,11 +1,11 @@
-import { cancelCapture, isCapturing, startCapture } from '../../runtime/capture';
-import { bindHasDigit, bindKey, bindLabel, mouseButtonOf } from '../../core/keys';
+import { bindHasDigit, bindKey, mouseButtonOf } from '../../core/keys';
 import { bindOf, get as getEntry, isUsable, labelOf, list as listRegistry, tipOf } from '../../data/registry';
-import { getConfig, resetBind, setBind } from '../../core/settings';
+import { getConfig } from '../../core/settings';
 import { clashOf, labelOfReserved } from '../../host/vanilla';
 import { currentLang, t } from '../i18n';
-import type { ActionId, Bind, RegisteredHotkey } from '../../core/types';
-import { button, div, hint, section, span } from './dom';
+import type { Bind, RegisteredHotkey } from '../../core/types';
+import { div, hint, section, span } from './dom';
+import { createBindControl } from './control';
 import { foldHandlers } from './fold';
 
 const BROWSER_RESERVED: Bind[] = [
@@ -26,11 +26,6 @@ const BROWSER_RESERVED: Bind[] = [
 ];
 
 const warnSlots = new Map<string, HTMLElement>();
-
-function setKeyText(target: HTMLButtonElement, bind: Bind): void {
-  target.classList.toggle('dolhk-empty', bind.length === 0);
-  target.textContent = bind.length ? bindLabel(bind) : t().empty;
-}
 
 const BROWSER_KEYS = new Set(BROWSER_RESERVED.map(bindKey));
 
@@ -59,13 +54,8 @@ function duplicateOf(occupancy: Occupancy, key: string, self: string): string | 
   return null;
 }
 
-function paintWarnings(id: string, bind: Bind, occupancy: Occupancy): void {
-  const slot = warnSlots.get(id);
-  if (!slot) return;
-  if (bind.length === 0) {
-    slot.textContent = '';
-    return;
-  }
+function messagesFor(id: string, bind: Bind, occupancy: Occupancy): string[] {
+  if (bind.length === 0) return [];
   const s = t();
   const lang = currentLang();
   const messages: string[] = [];
@@ -83,47 +73,18 @@ function paintWarnings(id: string, bind: Bind, occupancy: Occupancy): void {
   if (side === 3 || side === 4) messages.push(s.warnSide);
   const reserved = clashOf(bind);
   if (reserved) messages.push(s.warnVanilla(labelOfReserved(reserved, lang)));
-  slot.textContent = messages.join(' · ');
+  return messages;
 }
 
-function beginCapture(id: string, target: HTMLButtonElement, repaint: () => void): void {
-  if (isCapturing()) cancelCapture();
-  const s = t();
-  const original = [...bindOf(id)];
-  target.classList.remove('dolhk-empty');
-  target.classList.add('dolhk-capturing');
-  target.textContent = s.pressCombo;
+/** 供第三方界面自行显示：该键位当前的提示文本，没有提示时返回空串 */
+export function warnOf(id: string): string {
+  return messagesFor(id, bindOf(id), occupancyOf()).join(' · ');
+}
 
-  let outsideHandler: ((ev: MouseEvent) => void) | null = null;
-  const detachOutside = () => {
-    if (!outsideHandler) return;
-    document.removeEventListener('click', outsideHandler, true);
-    outsideHandler = null;
-  };
-
-  startCapture(
-    atoms => {
-      target.textContent = atoms.length > 0 ? bindLabel(atoms) : s.pressCombo;
-    },
-    atoms => {
-      detachOutside();
-      target.classList.remove('dolhk-capturing');
-      if (atoms === null) {
-        setKeyText(target, original);
-        return;
-      }
-      setBind(id, atoms);
-      repaint();
-    },
-  );
-
-  setTimeout(() => {
-    outsideHandler = (ev: MouseEvent) => {
-      if (target.contains(ev.target as Node)) return;
-      cancelCapture();
-    };
-    document.addEventListener('click', outsideHandler, true);
-  }, 0);
+function paintWarnings(id: string, bind: Bind, occupancy: Occupancy): void {
+  const slot = warnSlots.get(id);
+  if (!slot) return;
+  slot.textContent = messagesFor(id, bind, occupancy).join(' · ');
 }
 
 function sourceBadge(id: string): string | null {
@@ -151,20 +112,8 @@ function buildRow(entry: RegisteredHotkey, repaint: () => void): HTMLElement {
   warnSlots.set(entry.id, warning);
   column.append(head, warning);
 
-  const actions = div('dolhk-actions');
-  const keyButton = button('dolhk-key', '');
-  setKeyText(keyButton, bindOf(entry.id));
-  keyButton.addEventListener('click', () => beginCapture(entry.id, keyButton, repaint));
-
-  const resetButton = button('dolhk-reset', s.reset);
-  resetButton.addEventListener('click', () => {
-    if (entry.builtin) resetBind(entry.id as ActionId);
-    else setBind(entry.id, [...entry.defaultBind]);
-    repaint();
-  });
-
-  actions.append(keyButton, resetButton);
-  row.append(column, actions);
+  const actions = createBindControl(entry.id, { onChange: () => repaint() });
+  row.append(column, actions ?? div('dolhk-actions'));
   row.classList.toggle('dolhk-disabled', !available);
   return row;
 }

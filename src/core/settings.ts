@@ -54,6 +54,26 @@ function defaults(): Config {
 let cache: Config | null = null;
 let rev = 0;
 
+const listeners = new Set<() => void>();
+
+/** 配置写入后回调，供控件与外部界面同步；返回取消订阅的函数 */
+export function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notify(): void {
+  for (const listener of listeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn('[dol-hotkeys] settings listener failed', error);
+    }
+  }
+}
+
 /** v1→v2：仅在旧编码上替换默认键，避免影响用户自定义 */
 function migrateV1ToV2(rawBinds: Record<string, unknown>): void {
   for (const action of ACTION_ORDER) {
@@ -147,10 +167,7 @@ export function setBind(id: string, bind: Bind): void {
   config.binds[id] = [...bind];
   rev++;
   saveConfig();
-}
-
-export function resetBind(action: ActionId): void {
-  setBind(action, [...DEFAULT_BINDS[action]]);
+  notify();
 }
 
 export function conflictMode(): ConflictMode {
@@ -161,6 +178,7 @@ export function setConflictMode(mode: ConflictMode): void {
   const config = getConfig();
   config.conflictMode = mode;
   saveConfig();
+  notify();
 }
 
 /** 折叠状态只影响面板观感，不参与派发，因此不递增 rev */

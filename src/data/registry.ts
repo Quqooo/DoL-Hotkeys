@@ -11,9 +11,12 @@ const MAX_GROUP_ID = 64;
 const entries = new Map<string, RegisteredHotkey>();
 const listeners = new Set<() => void>();
 
-/** 注册表内容变化时回调，供面板重绘 */
-export function subscribe(listener: () => void): void {
+/** 注册表内容变化时回调，供面板与控件重绘；返回取消订阅的函数 */
+export function subscribe(listener: () => void): () => void {
   listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 function notify(): void {

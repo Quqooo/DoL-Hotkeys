@@ -4,6 +4,8 @@ import { install } from './runtime/engine';
 import { currentLang, setLangOverride, t } from './ui/i18n';
 import { applyVolumeOverride, installVolumeKeys } from './host/mobile';
 import { ensureTab, installPanel, openPanel } from './ui/panel';
+import { createBindControl } from './ui/panel/control';
+import { warnOf } from './ui/panel/rows';
 import * as registry from './data/registry';
 import { clashOf, labelOfReserved, warnOnRegister } from './host/vanilla';
 import { getConfig } from './core/settings';
@@ -77,6 +79,10 @@ window.DoLHK = {
   },
   available: availableOf,
   refreshTab: ensureTab,
+  ui: {
+    createBindControl,
+    warnOf,
+  },
 };
 
 installBuiltins();

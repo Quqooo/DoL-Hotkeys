@@ -54,6 +54,13 @@ declare global {
       readonly label: string;
       available: (id: string) => boolean;
       refreshTab: () => void;
+      ui: {
+        createBindControl: (
+          id: string,
+          options?: { showReset?: boolean; onChange?: (id: string, bind: Bind) => void },
+        ) => HTMLElement | null;
+        warnOf: (id: string) => string;
+      };
     };
     DoLHK_QUEUE?: unknown[] | { push: (def: unknown) => unknown };
     DoLHK_DECL?: unknown[];

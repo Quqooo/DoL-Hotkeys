@@ -539,6 +539,57 @@ async function main() {
       JSON.stringify(availability),
     );
 
+    const uiControl = await cdp.evaluate(`(() => {
+      const api = window.DoLHK;
+      api.register({ id: 'e2e.uirow', label: 'ui probe', defaultBind: ['AltLeft', 'KeyP'], handler: () => {} });
+      const host = document.createElement('div');
+      host.id = 'e2e-ui-host';
+      document.body.appendChild(host);
+      const control = api.ui.createBindControl('e2e.uirow');
+      if (control) host.appendChild(control);
+      return {
+        mounted: Boolean(control),
+        hasKey: Boolean(control?.querySelector('.dolhk-key')),
+        hasReset: Boolean(control?.querySelector('.dolhk-reset')),
+        missing: api.ui.createBindControl('e2e.missing'),
+      };
+    })()`);
+    await cdp.evaluate(`document.querySelector('#e2e-ui-host .dolhk-key').click(); true`);
+    await combo(cdp, ['Ctrl'], 'KeyL', 'l', 76);
+    const uiCaptured = await cdp.evaluate(`(() => ({
+      bind: window.DoLHK.getBind('e2e.uirow'),
+      text: document.querySelector('#e2e-ui-host .dolhk-key').textContent,
+      panel: document.querySelector('.dolhk-row[data-dolhk="e2e.uirow"] .dolhk-key')?.textContent ?? '',
+      warn: window.DoLHK.ui.warnOf('e2e.uirow'),
+    }))()`);
+    check(
+      'L21 ui bind control captures a bind and reports a warning',
+      uiControl.mounted === true &&
+        uiControl.hasKey === true &&
+        uiControl.hasReset === true &&
+        uiControl.missing === null &&
+        uiCaptured.bind.join('|') === 'ControlLeft|KeyL' &&
+        uiCaptured.text.length > 0 &&
+        uiCaptured.panel === uiCaptured.text &&
+        uiCaptured.warn.length > 0,
+      JSON.stringify({ uiControl, uiCaptured }),
+    );
+    await cdp.evaluate(`document.querySelector('#e2e-ui-host .dolhk-reset').click(); true`);
+    const uiReset = await cdp.evaluate(`(() => ({
+      bind: window.DoLHK.getBind('e2e.uirow'),
+      warn: window.DoLHK.ui.warnOf('e2e.uirow'),
+    }))()`);
+    check(
+      'L21 ui bind control resets to the registered default',
+      uiReset.bind.join('|') === 'AltLeft|KeyP' && uiReset.warn === '',
+      JSON.stringify(uiReset),
+    );
+    await cdp.evaluate(`(() => {
+      window.DoLHK.unregister('e2e.uirow');
+      document.getElementById('e2e-ui-host')?.remove();
+      return true;
+    })()`);
+
     const panelRows = await cdp.evaluate(`(() => {
       const api = window.DoLHK;
       const make = (id, group, bind) => ({ id, group, defaultBind: bind, label: id, handler: () => {} });
