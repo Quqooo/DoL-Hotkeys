@@ -23,18 +23,23 @@ eq(
 
 // 结构化校验
 eq('normalize ok', k.normalizeBind(['ControlLeft', 'KeyA']), ['ControlLeft', 'KeyA']);
-// 依次为：重复原子、未知原子、裸修饰键、空数组、超长组合
+// 依次为：重复原子、不可用原子、裸修饰键名、空数组、超长组合
 eq(
   'normalize rejects malformed chords',
   [
     k.normalizeBind(['KeyA', 'KeyA']),
-    k.normalizeBind(['Nope']),
+    k.normalizeBind(['Unidentified']),
     k.normalizeBind(['Control']),
     k.normalizeBind([]),
     k.normalizeBind(new Array(9).fill('KeyA').map((v, i) => `${v}${i}`)),
   ],
   [null, null, null, null, null],
 );
+eq('normalize accepts media keys', k.normalizeBind(['MediaPlayPause']), ['MediaPlayPause']);
+eq('normalize accepts volume keys', k.normalizeBind(['AudioVolumeUp', 'KeyA']), ['AudioVolumeUp', 'KeyA']);
+eq('normalize rejects disallowed mouse buttons', k.normalizeBind(['Mouse2']), null);
+eq('saved bind keeps a media key', k.normalizeSavedBind(['MediaPlayPause']), ['MediaPlayPause']);
+eq('saved bind keeps an empty array', k.normalizeSavedBind([]), []);
 eq('normalize mouse ok', k.normalizeBind(['ControlLeft', 'Mouse3']), ['ControlLeft', 'Mouse3']);
 
 // 匹配语义：bindKey 是唯一判等依据，修饰键按族归并、顺序保留

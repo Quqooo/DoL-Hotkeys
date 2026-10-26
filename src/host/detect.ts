@@ -330,10 +330,11 @@ function detectModLoader(): OrigEntry | null {
   return null;
 }
 
+export type DetectionSource = 'dynamic' | 'snapshot' | 'mixed';
+
 export interface DetectionResult {
   entries: OrigEntry[];
-  partiallyDetected: boolean;
-  usedSnapshot: boolean;
+  source: DetectionSource;
 }
 
 export function detect(): DetectionResult {
@@ -347,10 +348,6 @@ export function detect(): DetectionResult {
   const nothingDetected = entries.length === 0;
   if (nothingDetected) entries.push(...SNAPSHOT_ENGINE, ...SNAPSHOT_MOUSETRAP, SNAPSHOT_LOADER);
 
-  const detectedLayers = [engine.entries, mousetrap, loader].filter(Boolean).length;
-  return {
-    entries,
-    partiallyDetected: detectedLayers > 0,
-    usedSnapshot: usedSnapshot || nothingDetected,
-  };
+  const source: DetectionSource = nothingDetected ? 'snapshot' : usedSnapshot ? 'mixed' : 'dynamic';
+  return { entries, source };
 }

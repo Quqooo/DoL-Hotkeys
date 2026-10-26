@@ -5,67 +5,17 @@ const MOUSE_CODE = /^Mouse(\d+)$/;
 
 const MOUSE_BUTTONS = new Set([1, 3, 4]);
 
+/** 不能作为热键原子的 code：不可识别键与裸修饰键名 */
+const BLOCKED_CODES = new Set(['Unidentified', 'Dead', 'Shift', 'Control', 'Alt', 'Meta']);
+
+/** e.code 的形态：KeyA、F5、MediaPlayPause、AudioVolumeUp */
+const CODE_SHAPE = /^[A-Z][A-Za-z0-9]*$/;
+
 /** MouseEvent.button 到 buttons 位掩码的映射；中键为 4，右键为 2 */
 const MOUSE_BUTTON_BITS: Record<number, number> = { 0: 1, 1: 4, 2: 2, 3: 8, 4: 16 };
 
 /** 单个组合允许的最大原子数 */
 export const MAX_CHORD_ATOMS = 8;
-
-const NAMED_CODES = [
-  'Backquote',
-  'Minus',
-  'Equal',
-  'BracketLeft',
-  'BracketRight',
-  'Backslash',
-  'IntlBackslash',
-  'IntlRo',
-  'IntlYen',
-  'Semicolon',
-  'Quote',
-  'Comma',
-  'Period',
-  'Slash',
-  'Space',
-  'Enter',
-  'Tab',
-  'Escape',
-  'Backspace',
-  'Delete',
-  'Insert',
-  'PageUp',
-  'PageDown',
-  'Home',
-  'End',
-  'CapsLock',
-  'PrintScreen',
-  'ScrollLock',
-  'Pause',
-  'ContextMenu',
-  'NumLock',
-  'NumpadAdd',
-  'NumpadSubtract',
-  'NumpadMultiply',
-  'NumpadDivide',
-  'NumpadDecimal',
-  'NumpadEnter',
-  'NumpadEqual',
-  'NumpadComma',
-  'ArrowUp',
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-];
-
-const KEY_CODES = new Set<string>(NAMED_CODES);
-
-for (let i = 0; i < 26; i++) KEY_CODES.add(`Key${String.fromCharCode(65 + i)}`);
-for (let i = 0; i <= 9; i++) KEY_CODES.add(`Digit${i}`);
-for (let i = 1; i <= 24; i++) KEY_CODES.add(`F${i}`);
-for (let i = 0; i <= 9; i++) KEY_CODES.add(`Numpad${i}`);
-for (const side of ['Left', 'Right']) {
-  for (const family of ['Shift', 'Control', 'Alt', 'Meta']) KEY_CODES.add(`${family}${side}`);
-}
 
 const LABELS: Record<string, string> = {
   Backquote: '`',
@@ -114,6 +64,13 @@ const LABELS: Record<string, string> = {
   AltRight: 'R Alt',
   MetaLeft: 'Meta',
   MetaRight: 'R Meta',
+  AudioVolumeUp: 'Vol +',
+  AudioVolumeDown: 'Vol -',
+  AudioVolumeMute: 'Mute',
+  MediaPlayPause: 'Play',
+  MediaStop: 'Stop',
+  MediaTrackNext: 'Next',
+  MediaTrackPrevious: 'Prev',
   Mouse1: 'Middle',
   Mouse3: 'Side 1',
   Mouse4: 'Side 2',
@@ -187,11 +144,15 @@ export function mouseButtonOf(bind: Bind): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/**
+ * 键位原子校验：接受任意形态合法的 `KeyboardEvent.code`，
+ * 只排除无法使用的值。这样录制、注册、读配置三条路径的判定一致。
+ */
 export function isBindAtom(code: unknown): code is string {
-  if (typeof code !== 'string' || !code) return false;
-  if (MODIFIER_CODES.test(code)) return true;
-  if (isMouseAtom(code)) return true;
-  return KEY_CODES.has(code);
+  if (typeof code !== 'string' || !CODE_SHAPE.test(code)) return false;
+  if (BLOCKED_CODES.has(code)) return false;
+  if (MOUSE_CODE.test(code)) return isMouseAtom(code);
+  return true;
 }
 
 /** 是否为受支持的鼠标原子（中键与两个侧键） */
@@ -311,8 +272,8 @@ function mousetrapKey(key: string): string | null {
   if (/^\d$/.test(key)) return `Digit${key}`;
   const fn = /^f(\d{1,2})$/.exec(key);
   if (fn) {
-    const code = `F${fn[1]}`;
-    return KEY_CODES.has(code) ? code : null;
+    const index = Number(fn[1]);
+    return index >= 1 && index <= 24 ? `F${index}` : null;
   }
   const numpad = /^(?:num|numpad)\s*([0-9+\-*/.])$/.exec(key);
   if (numpad) {
@@ -324,7 +285,7 @@ function mousetrapKey(key: string): string | null {
       '.': 'NumpadDecimal',
     };
     const code = table[numpad[1]] ?? `Numpad${numpad[1]}`;
-    return KEY_CODES.has(code) ? code : null;
+    return isBindAtom(code) ? code : null;
   }
   return null;
 }

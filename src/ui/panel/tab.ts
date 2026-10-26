@@ -1,4 +1,4 @@
-import { stateTemp } from '../../host/game';
+import { stateTemp, wikifyEval } from '../../host/game';
 import { invalidateLang, t } from '../i18n';
 
 /** 面板内容的渲染入口，由装配层注入，避免与 panel/index 互相引用 */
@@ -101,7 +101,8 @@ export function installTab(renderer: Renderer): void {
 export function openPanel(): void {
   const overlay = document.getElementById('customOverlay');
   if (overlay?.getAttribute('data-overlay') !== 'options') {
-    window.wikifier?.('overlayReplace', '"options"');
+    if (typeof window.wikifier === 'function') window.wikifier('overlayReplace', '"options"');
+    else wikifyEval('<<overlayReplace "options">>');
   }
   let attempts = 0;
   const focus = (): void => {

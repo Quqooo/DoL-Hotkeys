@@ -56,7 +56,6 @@ export function paintOriginal(view: OriginalView): void {
     row.append(left, right);
     view.body.append(row);
   }
-  if (result.usedSnapshot) view.source.textContent = s.srcMixed;
-  else if (result.partiallyDetected) view.source.textContent = s.srcDynamic;
-  else view.source.textContent = s.srcSnapshot;
+  const label = result.source === 'snapshot' ? s.srcSnapshot : result.source === 'mixed' ? s.srcMixed : s.srcDynamic;
+  view.source.textContent = label;
 }

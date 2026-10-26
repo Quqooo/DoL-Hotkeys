@@ -1,4 +1,4 @@
-import { isMouseAtom, MAX_CHORD_ATOMS } from '../core/keys';
+import { isBindAtom, isMouseAtom, MAX_CHORD_ATOMS } from '../core/keys';
 import type { Bind } from '../core/types';
 
 /** 组合静默超时（毫秒），超时后结束录制 */
@@ -54,6 +54,8 @@ function press(code: string, repeat: boolean, hasModifier: boolean): boolean {
   const state = active;
   if (!state) return false;
   if (repeat) return true;
+  // 无法保存的键直接忽略，避免录到一个重载后会被判非法的原子
+  if (!isBindAtom(code)) return true;
 
   if (code === 'Escape') {
     finishWith(null);

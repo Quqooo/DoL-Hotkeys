@@ -61,9 +61,15 @@ export function confirmDialog(message: string, okLabel: string, cancelLabel: str
   actions.append(actionButton(cancelLabel, () => choose(false)), actionButton(okLabel, () => choose(true)));
   body.append(text, actions);
 
-  api.setup(title, HOST_CLASS);
-  api.append(body);
-  api.open();
+  try {
+    api.setup(title, HOST_CLASS);
+    api.append(body);
+    api.open();
+  } catch (error) {
+    console.warn('[dol-hotkeys] dialog failed', error);
+    closeHost();
+    return Promise.resolve(false);
+  }
 
   return new Promise<boolean>(resolve => {
     pending = resolve;

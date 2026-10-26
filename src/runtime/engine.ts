@@ -96,7 +96,7 @@ function onMouseDown(e: MouseEvent): void {
     if (captureMouseDown(e)) {
       e.preventDefault();
       claimed.add(e.button);
-    }
+    } else claimed.delete(e.button);
     return;
   }
   if (hardBlocked()) {
@@ -105,6 +105,7 @@ function onMouseDown(e: MouseEvent): void {
   }
   trimMouseAtoms(e.buttons);
   if (pressAtom(code, e)) claimed.add(e.button);
+  else claimed.delete(e.button);
 }
 
 function onMouseUp(e: MouseEvent): void {
