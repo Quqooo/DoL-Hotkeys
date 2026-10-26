@@ -31,6 +31,6 @@
 npm install
 npm run typecheck
 npm run build     # dist/：hotkeys.js、hotkeys-early.js、hotkeys.css、boot.json
-npm run pack      # dist/DoL-Hotkeys-v1.0.2.mod.zip
+npm run pack      # dist/DoL-Hotkeys-<version>.mod.zip
 npm run test:e2e  # 本地 HTTP + 无头浏览器 + CDP 断言
 ```

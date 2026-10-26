@@ -12,7 +12,7 @@ Rebindable hotkeys for the everyday actions of [Degrees of Lewdity](https://gitg
 ## Features
 
 - Adds a **Hotkeys** tab to the settings overlay, with rebindable actions: back, forward, characteristics, social, traits and more
-- Any key, sequences of up to 8 steps; the key box *is* the capture field and saves as soon as you let go
+- Any key, ordered combinations of up to 8 keys; the key box *is* the capture field and saves as soon as you release
 - `Esc` cancels an edit, `Backspace` clears the binding; settings live in `localStorage`
 - On the Android client the volume keys can be taken over — volume `+` back, `-` forward by default, invertible
 - Ignored while a text field has focus or during `V.tempDisable`
@@ -31,6 +31,6 @@ Rebindable hotkeys for the everyday actions of [Degrees of Lewdity](https://gitg
 npm install
 npm run typecheck
 npm run build     # dist/: hotkeys.js, hotkeys-early.js, hotkeys.css, boot.json
-npm run pack      # dist/DoL-Hotkeys-v1.0.2.mod.zip
+npm run pack      # dist/DoL-Hotkeys-<version>.mod.zip
 npm run test:e2e  # local HTTP + headless browser + CDP assertions
 ```
