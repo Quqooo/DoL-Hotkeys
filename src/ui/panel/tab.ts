@@ -82,6 +82,7 @@ export function ensureTab(): void {
 export function installTab(renderer: Renderer): void {
   render = renderer;
   if (!tabObserver) {
+    // 覆盖层可能随段落一起重建（PassageHeader / Footer 也在 #passages 内），不能按目标节点过滤
     tabObserver = new MutationObserver(() => {
       if (pendingScan) return;
       pendingScan = true;

@@ -34,7 +34,6 @@ function defaults(): Config {
     volumeInvert: false,
     conflictMode: 'first',
     binds: cloneDefaults(),
-    external: [],
     collapsed: [],
   };
 }
@@ -113,7 +112,6 @@ function applyStored(parsed: Record<string, unknown>, config: Config): boolean {
   if (CONFLICT_MODES.includes(parsed.conflictMode as ConflictMode)) {
     config.conflictMode = parsed.conflictMode as ConflictMode;
   }
-  config.external = readStringList(parsed.external);
   config.collapsed = readStringList(parsed.collapsed);
 
   const rawBinds = parsed.binds && typeof parsed.binds === 'object' ? (parsed.binds as Record<string, unknown>) : {};

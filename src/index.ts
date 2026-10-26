@@ -72,6 +72,8 @@ window.DoLHK = {
   register,
   unregister: registry.unregister,
   getBind,
+  getDefaultBind: registry.defaultBindOf,
+  list: () => registry.list().map(entry => entry.id),
   openPanel,
   lang: currentLang,
   get label(): string {

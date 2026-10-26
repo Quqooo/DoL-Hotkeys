@@ -251,6 +251,12 @@ export function bindOf(id: string): Bind {
   return entries.get(id)?.defaultBind ?? [];
 }
 
+/** 注册时的默认键位；未注册返回 null */
+export function defaultBindOf(id: string): Bind | null {
+  const entry = entries.get(id);
+  return entry ? [...entry.defaultBind] : null;
+}
+
 /** available() 抛错视为不可用，避免一个条目的错误影响整批派发 */
 export function isUsable(entry: RegisteredHotkey): boolean {
   try {

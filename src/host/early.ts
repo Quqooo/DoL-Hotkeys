@@ -81,10 +81,17 @@ function instrument(Mousetrap: any): any {
   return Mousetrap;
 }
 
+/** 原生监听条数上限：只用于识别引擎处理器，超出后不再记录 */
+const MAX_NATIVE = 200;
+
 function recordNative(type: unknown, listener: unknown): void {
   if (typeof type !== 'string' || !type.startsWith('key')) return;
   if (typeof listener !== 'function') return;
-  registry.native.push({ keys: type, combos: [type], src: String(listener) });
+  if (registry.native.length >= MAX_NATIVE) return;
+  const src = String(listener);
+  // 同一 type 与源码只记一次：重复注册很常见，去重后检测仍然够用
+  if (registry.native.some(item => item.keys === type && item.src === src)) return;
+  registry.native.push({ keys: type, combos: [type], src });
 }
 
 let current: any;

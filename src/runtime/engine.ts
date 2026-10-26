@@ -68,6 +68,8 @@ function pressAtom(code: string, event: Event): boolean {
 }
 
 function onKeyDown(e: KeyboardEvent): void {
+  // 输入法组字期间的按键不属于热键
+  if (e.isComposing) return;
   if (isCapturing()) {
     if (captureKeyDown(e)) e.preventDefault();
     return;

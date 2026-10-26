@@ -77,4 +77,8 @@ r.register(def({ id: 'tip.one', tip: { zh: '会打开面板', en: 'Opens the pan
 check('tip resolved', r.tipOf(r.get('tip.one'), 'zh') === '会打开面板');
 check('tip absent is null', r.tipOf(r.get('mousetrap.one'), 'zh') === null);
 
+check('default bind of a registered id', JSON.stringify(r.defaultBindOf('group.one')) === '["ControlLeft","KeyA"]');
+check('default bind of an unknown id is null', r.defaultBindOf('nope.nope') === null);
+check('list returns registered ids', r.list().map(entry => entry.id).includes('group.one'));
+
 finish('registry');
