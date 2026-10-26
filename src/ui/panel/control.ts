@@ -44,7 +44,6 @@ export function createBindControl(id: string, options: BindControlOptions = {}):
     }
     key.disabled = gone;
     if (reset) reset.disabled = gone;
-    root.classList.toggle('dolhk-disabled', gone);
   };
 
   const dispose = (): void => {

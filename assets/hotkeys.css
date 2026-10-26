@@ -224,10 +224,6 @@
 	line-height: 1.5;
 }
 
-.dolhk-disabled .dolhk-col {
-	opacity: 0.6;
-}
-
 .dolhk-full {
 	grid-column: 1 / -1;
 }
@@ -240,7 +236,7 @@
 }
 
 .dolhk-fold:hover {
-	background-color: rgba(0, 0, 0, 0.18);
+	background-color: rgba(0, 0, 0, 0.04);
 }
 
 .dolhk-fold:focus-visible {

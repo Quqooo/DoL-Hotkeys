@@ -36,7 +36,6 @@ export interface Dict {
   conflictHint: string;
   modeAll: string;
   modeFirst: string;
-  unavailable: string;
   names: Record<ActionId, string>;
   orig: {
     links: (from: number, to: number) => string;
@@ -86,7 +85,6 @@ const zh: Dict = {
   conflictHint: '多个动作共用同一组合时',
   modeAll: '全部触发',
   modeFirst: '仅触发一个',
-  unavailable: '当前不可用',
   names: {
     back: '回溯',
     forward: '前进',
@@ -148,7 +146,6 @@ const en: Dict = {
   conflictHint: 'Shortcut conflicts between actions',
   modeAll: 'All',
   modeFirst: 'First',
-  unavailable: 'Unavailable now',
   names: {
     back: 'Back',
     forward: 'Forward',

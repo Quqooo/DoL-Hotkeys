@@ -1,5 +1,5 @@
 import { bindHasDigit, bindKey, mouseButtonOf } from '../../core/keys';
-import { bindOf, get as getEntry, isUsable, labelOf, list as listRegistry, tipOf } from '../../data/registry';
+import { bindOf, get as getEntry, labelOf, list as listRegistry, tipOf } from '../../data/registry';
 import { getConfig } from '../../core/settings';
 import { clashOf, labelOfReserved } from '../../host/vanilla';
 import { currentLang, t } from '../i18n';
@@ -94,7 +94,6 @@ function sourceBadge(id: string): string | null {
 }
 
 function buildRow(entry: RegisteredHotkey, repaint: () => void): HTMLElement {
-  const s = t();
   const lang = currentLang();
   const row = div('settingsToggleItem dolhk-row');
   row.dataset.dolhk = entry.id;
@@ -106,16 +105,12 @@ function buildRow(entry: RegisteredHotkey, repaint: () => void): HTMLElement {
   const badge = entry.builtin ? null : sourceBadge(entry.id);
   if (badge) head.append(span('dolhk-badge', badge));
 
-  const available = isUsable(entry);
-  if (!available) head.append(span('dolhk-muted', s.unavailable));
-
   const warning = div('dolhk-warn');
   warnSlots.set(entry.id, warning);
   column.append(head, warning);
 
   const actions = createBindControl(entry.id, { onChange: () => repaint() });
   row.append(column, actions ?? div('dolhk-actions'));
-  row.classList.toggle('dolhk-disabled', !available);
   return row;
 }
 
