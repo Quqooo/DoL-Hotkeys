@@ -1,6 +1,6 @@
 import { withDeclaration } from './decl';
 import { normalizeBind, parseMousetrap } from '../core/keys';
-import { getConfig } from '../core/settings';
+import { forgetBind, getConfig } from '../core/settings';
 import { ACTION_ORDER, type ActionId, type Bind, type GroupDecl, type GroupRef, type HotkeyDefInput, type Lang, type LocalizedText, type RegisteredHotkey } from '../core/types';
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$/;
@@ -175,8 +175,13 @@ function store(input: HotkeyDefInput, id: string, bind: Bind, builtin: boolean):
   notify();
 }
 
-export function unregister(id: string): boolean {
+/**
+ * 注销一个热键。默认保留用户在配置里的键位，重新注册后可以沿用；
+ * `forgetBind` 为 true 时一并删除，适用于模组被移除的场景。
+ */
+export function unregister(id: string, options?: { forgetBind?: boolean }): boolean {
   const removed = entries.delete(id);
+  if (options?.forgetBind) forgetBind(id);
   if (removed) {
     rev++;
     notify();

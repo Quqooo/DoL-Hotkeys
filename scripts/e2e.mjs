@@ -584,11 +584,23 @@ async function main() {
       uiReset.bind.join('|') === 'AltLeft|KeyP' && uiReset.warn === '',
       JSON.stringify(uiReset),
     );
-    await cdp.evaluate(`(() => {
+    const uiGone = await cdp.evaluate(`(() => {
       window.DoLHK.unregister('e2e.uirow');
-      document.getElementById('e2e-ui-host')?.remove();
-      return true;
+      const host = document.getElementById('e2e-ui-host');
+      const key = host.querySelector('.dolhk-key');
+      const state = {
+        disabled: key.disabled,
+        warn: window.DoLHK.ui.warnOf('e2e.uirow'),
+        bind: window.DoLHK.getBind('e2e.uirow'),
+      };
+      host.remove();
+      return state;
     })()`);
+    check(
+      'L21 unregistered entry disables its control and drops the bind',
+      uiGone.disabled === true && uiGone.warn === '' && uiGone.bind === null,
+      JSON.stringify(uiGone),
+    );
 
     const panelRows = await cdp.evaluate(`(() => {
       const api = window.DoLHK;

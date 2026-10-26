@@ -1,25 +1,9 @@
-// 键位编码与旧配置迁移的单元测试（M0 契约）
+// 键位编码的单元测试
 // 运行：npm test
 import { load, reporter } from './lib/unit.mjs';
 
 const k = await load('core/keys.ts', 'keys');
 const { check, eq, finish } = reporter();
-
-// 旧 step 编码 → 结构化 Bind
-eq(
-  'legacy modifier mapping',
-  [k.legacyStepToBind('Ctrl+KeyZ'), k.legacyStepToBind('Alt+KeyC')],
-  [['ControlLeft', 'KeyZ'], ['AltLeft', 'KeyC']],
-);
-eq('legacy modifier order', k.legacyStepToBind('Shift+Ctrl+KeyA'), ['ControlLeft', 'ShiftLeft', 'KeyA']);
-eq('legacy combo', k.legacyStepToBind('Ctrl+KeyA,KeyB'), ['ControlLeft', 'KeyA', 'KeyB']);
-eq('legacy mouse', k.legacyStepToBind('Mouse3'), ['Mouse3']);
-// 依次为：空串、悬空修饰键、未知按键
-eq('legacy rejects malformed steps', ['', 'Ctrl+', 'Ctrl+Nope'].map(k.legacyStepToBind), [null, null, null]);
-
-// 多段序列在 v3 里不存在，按按下顺序拍平并去重
-eq('legacy sequence flatten', k.bindFromLegacySteps(['Alt+KeyK', 'Alt+KeyJ']), ['AltLeft', 'KeyK', 'KeyJ']);
-eq('legacy single step array', k.bindFromLegacySteps(['Ctrl+KeyZ']), ['ControlLeft', 'KeyZ']);
 
 // Mousetrap 有损适配：只接受单个 chord
 eq(

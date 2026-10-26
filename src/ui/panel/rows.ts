@@ -76,8 +76,9 @@ function messagesFor(id: string, bind: Bind, occupancy: Occupancy): string[] {
   return messages;
 }
 
-/** 供第三方界面自行显示：该键位当前的提示文本，没有提示时返回空串 */
+/** 供第三方界面自行显示：该键位当前的提示文本，没有提示或未注册时返回空串 */
 export function warnOf(id: string): string {
+  if (!getEntry(id)) return '';
   return messagesFor(id, bindOf(id), occupancyOf()).join(' · ');
 }
 

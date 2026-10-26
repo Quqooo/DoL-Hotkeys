@@ -1,4 +1,4 @@
-import { bindFromLegacySteps, normalizeSavedBind } from './keys';
+import { normalizeSavedBind, parseV2Binds } from './keys';
 import { ACTION_ORDER, type ActionId, type Bind, type ConflictMode, type Config, type LangMode } from './types';
 
 const STORAGE_KEY = 'dol-hotkeys:config';
@@ -16,18 +16,6 @@ export const DEFAULT_BINDS: Record<ActionId, Bind> = {
   options: ['AltLeft', 'KeyO'],
   saves: ['AltLeft', 'KeyS'],
   cheats: ['AltLeft', 'KeyH'],
-};
-
-/** v1 默认键（旧编码），仅用于 v1→v2 迁移 */
-const LEGACY_V1_DEFAULTS: Partial<Record<ActionId, string[]>> = {
-  back: ['Alt+KeyZ'],
-  forward: ['Alt+KeyX'],
-};
-
-/** v2 默认键，v1 用户迁移后的目标 */
-const V2_DEFAULTS: Partial<Record<ActionId, string[]>> = {
-  back: ['Ctrl+KeyZ'],
-  forward: ['Ctrl+KeyX'],
 };
 
 const CONFLICT_MODES: readonly ConflictMode[] = ['first', 'all'];
@@ -74,29 +62,18 @@ function notify(): void {
   }
 }
 
-/** v1→v2：仅在旧编码上替换默认键，避免影响用户自定义 */
-function migrateV1ToV2(rawBinds: Record<string, unknown>): void {
-  for (const action of ACTION_ORDER) {
-    const legacy = LEGACY_V1_DEFAULTS[action];
-    const next = V2_DEFAULTS[action];
-    if (!legacy || !next) continue;
-    const current = rawBinds[action];
-    if (!Array.isArray(current)) continue;
-    const steps = current.filter((item): item is string => typeof item === 'string');
-    if (steps.length === legacy.length && steps.every((step, index) => step === legacy[index])) {
-      rawBinds[action] = [...next];
-    }
+/** 逐条解析：解析失败的条目保持默认值，不因一条非法数据丢弃其余配置 */
+function readBinds(rawBinds: Record<string, unknown>, target: Config): void {
+  for (const [id, value] of Object.entries(rawBinds)) {
+    const bind = normalizeSavedBind(value);
+    if (bind) target.binds[id] = bind;
   }
 }
 
-/** 逐条解析：解析失败的条目保持默认值，不因一条非法数据丢弃其余配置 */
-function readBinds(
-  rawBinds: Record<string, unknown>,
-  target: Config,
-  parse: (value: unknown) => Bind | null,
-): void {
+/** 1.0.2 的键位是 step 串，转换为有序组合 */
+function readV2Binds(rawBinds: Record<string, unknown>, target: Config): void {
   for (const [id, value] of Object.entries(rawBinds)) {
-    const bind = parse(value);
+    const bind = parseV2Binds(value);
     if (bind) target.binds[id] = bind;
   }
 }
@@ -126,9 +103,9 @@ export function getConfig(): Config {
   return config;
 }
 
-/** 把已存储的内容读进 config；返回是否需要回写（发生过迁移） */
+/** 把已存储的内容读进 config；返回是否需要回写（1.0.2 的配置需要升级） */
 function applyStored(parsed: Record<string, unknown>, config: Config): boolean {
-  const version = typeof parsed.v === 'number' ? parsed.v : 1;
+  const version = typeof parsed.v === 'number' ? parsed.v : CONFIG_VERSION;
   const lang = parsed.lang;
   if (lang === 'auto' || lang === 'zh' || lang === 'en') config.lang = lang as LangMode;
   if (typeof parsed.volumeKeys === 'boolean') config.volumeKeys = parsed.volumeKeys;
@@ -140,13 +117,12 @@ function applyStored(parsed: Record<string, unknown>, config: Config): boolean {
   config.collapsed = readStringList(parsed.collapsed);
 
   const rawBinds = parsed.binds && typeof parsed.binds === 'object' ? (parsed.binds as Record<string, unknown>) : {};
-  if (version >= 3) {
-    readBinds(rawBinds, config, normalizeSavedBind);
-    return false;
+  if (version < 3) {
+    readV2Binds(rawBinds, config);
+    return true;
   }
-  if (version < 2) migrateV1ToV2(rawBinds);
-  readBinds(rawBinds, config, bindFromLegacySteps);
-  return true;
+  readBinds(rawBinds, config);
+  return false;
 }
 
 export function saveConfig(): void {
@@ -177,6 +153,16 @@ export function conflictMode(): ConflictMode {
 export function setConflictMode(mode: ConflictMode): void {
   const config = getConfig();
   config.conflictMode = mode;
+  saveConfig();
+  notify();
+}
+
+/** 删除某个 id 的已存键位，供卸载时同步清理 */
+export function forgetBind(id: string): void {
+  const config = getConfig();
+  if (!(id in config.binds)) return;
+  delete config.binds[id];
+  rev++;
   saveConfig();
   notify();
 }

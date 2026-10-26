@@ -119,15 +119,15 @@ const LABELS: Record<string, string> = {
   Mouse4: 'Side 2',
 };
 
-/** 迁移统一取左侧键 */
-const LEGACY_MODS: Record<string, string> = {
+/** 1.0.2 的修饰键别名，迁移统一取左侧键 */
+const V2_MODS: Record<string, string> = {
   Ctrl: 'ControlLeft',
   Shift: 'ShiftLeft',
   Alt: 'AltLeft',
   Meta: 'MetaLeft',
 };
 
-const LEGACY_MOD_ORDER = ['Ctrl', 'Shift', 'Alt', 'Meta'];
+const V2_MOD_ORDER = ['Ctrl', 'Shift', 'Alt', 'Meta'];
 
 /** 有损适配仅接受左侧键 */
 const MOUSETRAP_MODS: Record<string, string> = {
@@ -231,8 +231,8 @@ export function normalizeSavedBind(input: unknown): Bind | null {
   return normalizeBind(input);
 }
 
-/** 旧编码迁移：`Ctrl+KeyA,KeyB` → [ControlLeft, KeyA, KeyB]；旧编码不含顺序，修饰符置于前部 */
-export function legacyStepToBind(step: string): Bind | null {
+/** 1.0.2 的 step 串：`Ctrl+KeyA,KeyB` → [ControlLeft, KeyA, KeyB]；旧编码不含顺序，修饰键置于前部 */
+function parseV2Step(step: string): Bind | null {
   if (typeof step !== 'string' || !step) return null;
   const parts = step.split('+');
   const tail = parts.pop() ?? '';
@@ -241,13 +241,13 @@ export function legacyStepToBind(step: string): Bind | null {
   if (codes.length === 0) return null;
 
   const out: Bind = [];
-  for (const mod of LEGACY_MOD_ORDER) {
+  for (const mod of V2_MOD_ORDER) {
     if (!mods.includes(mod)) continue;
-    const atom = LEGACY_MODS[mod];
+    const atom = V2_MODS[mod];
     if (!out.includes(atom)) out.push(atom);
   }
   for (const mod of mods) {
-    if (LEGACY_MOD_ORDER.includes(mod)) continue;
+    if (V2_MOD_ORDER.includes(mod)) continue;
     return null;
   }
   for (const code of codes) {
@@ -258,12 +258,12 @@ export function legacyStepToBind(step: string): Bind | null {
   return out;
 }
 
-/** 多段旧绑定转换为单个组合：按顺序合并并去重，避免静默丢弃 */
-export function bindFromLegacySteps(steps: unknown): Bind | null {
+/** 1.0.2 的多个 step 按顺序合并为一个组合并去重，避免静默丢弃 */
+export function parseV2Binds(steps: unknown): Bind | null {
   if (!Array.isArray(steps)) return null;
   const out: Bind = [];
   for (const step of steps) {
-    const bind = legacyStepToBind(typeof step === 'string' ? step : '');
+    const bind = parseV2Step(typeof step === 'string' ? step : '');
     if (!bind) continue;
     for (const atom of bind) {
       if (!out.includes(atom) && out.length < MAX_CHORD_ATOMS) out.push(atom);

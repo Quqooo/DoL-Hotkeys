@@ -56,6 +56,8 @@ export function createBindControl(id: string, options: BindControlOptions = {}):
 
   // 首次连接后才开始回收：面板先建行后挂载，构建期间 isConnected 仍是 false
   const sync = (): void => {
+    // 条目被注销时放弃进行中的录制，避免把键位写回一个不存在的 id
+    if (!getEntry(id) && capturing) cancelCapture();
     if (root.isConnected) attached = true;
     else if (attached) {
       dispose();

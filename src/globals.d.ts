@@ -47,7 +47,7 @@ declare global {
       readonly api: number;
       readonly version: string;
       register: (def: HotkeyDefInput) => boolean;
-      unregister: (id: string) => boolean;
+      unregister: (id: string, options?: { forgetBind?: boolean }) => boolean;
       getBind: (id: string) => Bind | null;
       openPanel: () => void;
       lang: () => Lang;
