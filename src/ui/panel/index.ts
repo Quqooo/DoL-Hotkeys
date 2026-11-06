@@ -10,7 +10,7 @@ import { buildSection, clearWarnings, repaintWarnings } from './rows';
 import { buildConflict, buildLanguage, buildVolume } from './settings';
 import { ensureTab, installTab, updateTabLabel } from './tab';
 
-export { ensureTab, openPanel } from './tab';
+export { ensureTab, openPanel, publishLabel, renderInto } from './tab';
 
 let rootEl: HTMLElement | null = null;
 let listEl: HTMLElement | null = null;
@@ -102,10 +102,12 @@ export function renderPanel(): HTMLElement {
   return build();
 }
 
+/** 分页由 preload 写进 `titleOptions`；这里只登记渲染函数，任何时刻点分页都能出内容 */
+installTab(renderPanel);
+
 /** 装配分页与内容：分页生命周期在 tab.ts，内容构建在本文件 */
 export function installPanel(): void {
   if (!panelInstalled) {
-    installTab(renderPanel);
     window.addEventListener('resize', applyWidth);
     panelInstalled = true;
   }

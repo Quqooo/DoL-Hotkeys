@@ -15,13 +15,12 @@ const STATIC: ReservedBind[] = [
 
 const warned = new Set<string>();
 
-let cacheSignature = '';
+let cacheSignature: string | null = null;
 let cached: ReservedBind[] = [];
 
-/** 观测快照的指纹：内容变化（含解绑后重新绑定）都会改变它 */
+/** 观测表的指纹：内容变化（含解绑后重新绑定）都会改变它 */
 function signature(): string {
-  const bindings = window.__DoLHKEarly?.bindings ?? [];
-  return bindings.map(binding => binding.combos.join(',')).join(';');
+  return (window.__DoLHKEarly?.bindings ?? []).map(binding => binding.combos.join(',')).join(';');
 }
 
 /**
@@ -30,7 +29,7 @@ function signature(): string {
  */
 export function reservedBinds(): ReservedBind[] {
   const sig = signature();
-  if (sig === cacheSignature) return cached;
+  if (cached.length > 0 && sig === cacheSignature) return cached;
   cacheSignature = sig;
 
   const out = [...STATIC];

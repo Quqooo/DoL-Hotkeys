@@ -3,11 +3,7 @@ import { load, reporter } from './lib/unit.mjs';
 
 // 必须在载入前放好观测数据：模块按此快照建表
 globalThis.window = {
-  __DoLHKEarly: {
-    bindings: [{ keys: 'z n', combos: ['z', 'n'], src: '' }],
-    native: [],
-    mousetrapSeen: true,
-  },
+  __DoLHKEarly: { bindings: [{ combos: ['z', 'n'] }] },
 };
 
 const v = await load('host/vanilla.ts', 'vanilla');

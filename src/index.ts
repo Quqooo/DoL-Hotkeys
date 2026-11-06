@@ -3,7 +3,7 @@ import { checkDeclarations } from './data/decl';
 import { install } from './runtime/engine';
 import { currentLang, setLangOverride, t } from './ui/i18n';
 import { applyVolumeOverride, installVolumeKeys } from './host/mobile';
-import { ensureTab, installPanel, openPanel } from './ui/panel';
+import { ensureTab, installPanel, openPanel, publishLabel, renderInto } from './ui/panel';
 import { createBindControl } from './ui/panel/control';
 import { warnOf } from './ui/panel/rows';
 import * as registry from './data/registry';
@@ -48,6 +48,8 @@ function init(): boolean {
   if (!document.body) return false;
   const config = getConfig();
   setLangOverride(config.lang);
+  // 分页文案在 titleOptions 渲染时读取，必须先于打开选项写入
+  publishLabel();
   if (!listenersInstalled) {
     install();
     // 注册音量键监听会使 cordova 自动接管按键，随后需按配置重新声明一次（关闭状态亦然）
@@ -75,6 +77,7 @@ window.DoLHK = {
   getDefaultBind: registry.defaultBindOf,
   list: () => registry.list().map(entry => entry.id),
   openPanel,
+  renderInto,
   lang: currentLang,
   get label(): string {
     return t().tab;
@@ -107,5 +110,10 @@ function boot(): void {
 
 window.jQuery?.(document).on(':storyready', () => {
   init();
+});
+
+// 翻页后正文才是稳定的语言样本
+window.jQuery?.(document).on(':passagedisplay', () => {
+  publishLabel();
 });
 boot();

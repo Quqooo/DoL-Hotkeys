@@ -1,16 +1,12 @@
 import type { Bind, HotkeyDefInput, Lang } from './core/types';
 
 export interface EarlyBinding {
-  keys: string;
-  /** 该条目的原始组合串，用于按组合解除绑定 */
+  /** 一次 bind 调用登记的原始组合 */
   combos: string[];
-  src: string;
 }
 
 export interface EarlyRegistry {
   bindings: EarlyBinding[];
-  native: EarlyBinding[];
-  mousetrapSeen: boolean;
   /** 包装是否已安装；重复求值时据此跳过再次包装 */
   installed?: boolean;
   /** addon 是否已注册；ModLoader 不去重，重复注册会让声明被采集两次 */
@@ -52,6 +48,8 @@ declare global {
       getDefaultBind: (id: string) => Bind | null;
       list: () => string[];
       openPanel: () => void;
+      /** 供 `hotkeysPanel` widget 调用的内容渲染入口 */
+      renderInto: () => void;
       lang: () => Lang;
       readonly label: string;
       available: (id: string) => boolean;

@@ -14,6 +14,7 @@ const boot = {
   styleFileList: ['hotkeys.css'],
   scriptFileList_inject_early: ['hotkeys-early.js'],
   scriptFileList: ['hotkeys.js'],
+  scriptFileList_preload: ['hotkeys-preload.js'],
   tweeFileList: [],
   imgFileList: [],
   additionFile: [],
@@ -41,6 +42,19 @@ await mkdir(dist, { recursive: true });
 
 await build({ ...shared, entryPoints: [path.join(root, 'src/host/early.ts')], outfile: path.join(dist, 'hotkeys-early.js') });
 await build({ ...shared, entryPoints: [path.join(root, 'src/index.ts')], outfile: path.join(dist, 'hotkeys.js') });
+// preload 由 ModLoader 以「第一行必须是自执行函数」的约定加载，不能带 banner 和 use strict
+await build({
+  ...shared,
+  banner: undefined,
+  minify: false,
+  entryPoints: [path.join(root, 'src/preload.ts')],
+  outfile: path.join(dist, 'hotkeys-preload.js'),
+});
+{
+  const file = path.join(dist, 'hotkeys-preload.js');
+  const code = await readFile(file, 'utf8');
+  await writeFile(file, code.replace(/^"use strict";\r?\n/, ''), 'utf8');
+}
 
 await copyFile(path.join(root, 'assets/hotkeys.css'), path.join(dist, 'hotkeys.css'));
 await writeFile(path.join(dist, 'boot.json'), `${JSON.stringify(boot, null, 2)}\n`, 'utf8');

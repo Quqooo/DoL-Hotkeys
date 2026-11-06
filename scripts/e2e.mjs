@@ -333,8 +333,8 @@ async function openHotkeysTab(cdp) {
   await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
   await sleep(200);
   await pressAlt(cdp, 'O');
-  await cdp.waitFor(`document.querySelector('#overlayTabs button[data-dolhk-tab]')`, 15000);
-  await cdp.evaluate(`document.querySelector('#overlayTabs button[data-dolhk-tab]').click()`);
+  await cdp.waitFor(`document.querySelector('#overlayTabs span[data-dolhk-tab]')`, 15000);
+  await cdp.evaluate(`document.querySelector('#overlayTabs span[data-dolhk-tab]').click()`);
   return cdp.waitFor(`document.querySelector('.dolhk-row[data-dolhk]')`, 15000);
 }
 
@@ -424,7 +424,7 @@ async function main() {
     check(
       'L2 early hook captured vanilla Mousetrap bindings',
       await cdp.evaluate('Boolean(window.__DoLHKEarly && window.__DoLHKEarly.bindings.length)'),
-      await cdp.evaluate('JSON.stringify((window.__DoLHKEarly?.bindings ?? []).map(b => b.keys))'),
+      await cdp.evaluate('JSON.stringify((window.__DoLHKEarly?.bindings ?? []).map(b => b.combos.join(" ")))'),
     );
 
     await runProbe(process.env.HK_PROBE, probeCtx, ['sidebar']);
@@ -475,10 +475,10 @@ async function main() {
     await cdp.waitFor(`document.querySelector('#overlayTabs button')`);
 
     const tabLabels = await cdp.evaluate(`[...document.querySelectorAll('#overlayTabs button')].map(b => b.textContent)`);
-    const tabCount = await cdp.evaluate(`document.querySelectorAll('#overlayTabs button[data-dolhk-tab]').length`);
+    const tabCount = await cdp.evaluate(`document.querySelectorAll('#overlayTabs span[data-dolhk-tab]').length`);
     check('L3 hotkeys tab injected into the settings overlay', tabCount === 1, tabLabels.join(' / '));
 
-    await cdp.evaluate(`document.querySelector('#overlayTabs button[data-dolhk-tab]').click()`);
+    await cdp.evaluate(`document.querySelector('#overlayTabs span[data-dolhk-tab]').click()`);
     const panelReady = await cdp.waitFor(`document.querySelector('.dolhk')`);
     check('L3 panel renders', panelReady);
 
@@ -825,7 +825,7 @@ async function main() {
     await sleep(200);
     await pressAlt(cdp, 'S');
     await sleep(900);
-    const savesTabCount = await cdp.evaluate(`document.querySelectorAll('#overlayTabs button[data-dolhk-tab]').length`);
+    const savesTabCount = await cdp.evaluate(`document.querySelectorAll('#overlayTabs span[data-dolhk-tab]').length`);
     check('L16 hotkeys tab stays out of the saves overlay', savesTabCount === 0, String(savesTabCount));
     await closeOverlayAndSettle(cdp, 250);
     await openHotkeysTab(cdp);
@@ -1216,14 +1216,7 @@ async function main() {
       const trap = window.Mousetrap;
       if (!trap) return { skip: 'no mousetrap' };
       // reset() 会真的清空游戏自己的绑定、unbind() 会原地改写同一个表，测完必须按内容装回去
-      const copyTable = table => {
-        const out = {};
-        for (const key of Object.keys(table ?? {})) out[key] = Array.isArray(table[key]) ? [...table[key]] : table[key];
-        return out;
-      };
-      const savedCallbacks = copyTable(trap._callbacks);
-      const savedDirectMap = copyTable(trap._directMap);
-      const savedBindings = (window.__DoLHKEarly?.bindings ?? []).map(b => ({ ...b, combos: [...b.combos] }));
+      const savedBindings = (window.__DoLHKEarly?.bindings ?? []).map(b => ({ combos: [...b.combos] }));
 
       trap.unbind('n');
       redetect();
@@ -1232,10 +1225,6 @@ async function main() {
       redetect();
       const afterReset = texts();
 
-      trap._callbacks = {};
-      for (const key of Object.keys(savedCallbacks)) trap._callbacks[key] = savedCallbacks[key];
-      trap._directMap = {};
-      for (const key of Object.keys(savedDirectMap)) trap._directMap[key] = savedDirectMap[key];
       if (window.__DoLHKEarly) window.__DoLHKEarly.bindings = savedBindings;
       redetect();
       const restored = texts();

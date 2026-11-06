@@ -10,8 +10,8 @@ const PROBES = {
     await cdp.evaluate(`SugarCube.State.temporary.currentOverlay ? closeOverlay() : true`);
     await sleep(200);
     await pressAlt(cdp, 'O');
-    await cdp.waitFor(`document.querySelector('#overlayTabs button[data-dolhk-tab]')`, 15000);
-    await cdp.evaluate(`document.querySelector('#overlayTabs button[data-dolhk-tab]').click()`);
+    await cdp.waitFor(`document.querySelector('#overlayTabs span[data-dolhk-tab]')`, 15000);
+    await cdp.evaluate(`document.querySelector('#overlayTabs span[data-dolhk-tab]').click()`);
     await cdp.waitFor(`document.querySelector('.dolhk-orig-row')`, 15000);
     await sleep(400);
     const dump = await cdp.evaluate(`({
@@ -28,11 +28,11 @@ const PROBES = {
     }
   },
 
-  /** early 钩子观测到的原生监听与 Mousetrap 绑定 */
+  /** 早期观测到的 Mousetrap 绑定与 jQuery 键盘处理函数 */
   async keys({ cdp }) {
     const info = await cdp.evaluate(`(() => {
       const reg = window.__DoLHKEarly || {};
-      const nat = (reg.native || []).map(x => String(x.src));
+      const bindings = (reg.bindings || []).map(b => (b.combos || []).join(' '));
       const $ = window.jQuery;
       const jq = [];
       for (const [label, el] of [['document', document], ['window', window]]) {
@@ -44,19 +44,16 @@ const PROBES = {
           }
         }
       }
-      const pick = list => list.map(x => (typeof x === 'string' ? x : x.s));
-      const all = [...pick(nat), ...pick(jq)];
-      const hits = all.filter(s => /linkFollow/i.test(s));
+      const hits = jq.map(x => x.s).filter(s => /linkFollow/i.test(s));
       return {
-        native: nat.length,
-        bindingKeys: (reg.bindings || []).map(b => b.keys),
-        bindingCount: (reg.bindings || []).length,
+        bindingKeys: bindings,
+        bindingCount: bindings.length,
         jq: jq.map(x => x.t),
         jqCount: jq.length,
         linkFollowHits: hits.length,
         hasJqueryData: Boolean($ && $._data),
-        firstHit: hits[0] ? hits[0].replace(/\s+/g, ' ').slice(0, 300) : null,
-        hasCases: hits.map(h => (h.match(/case\s*"/g) || []).length).slice(0, 5),
+        firstHit: hits[0] ? hits[0].replace(/\\s+/g, ' ').slice(0, 300) : null,
+        hasCases: hits.map(h => (h.match(/case\\s*"/g) || []).length).slice(0, 5),
       };
     })()`);
     console.log('keys:', JSON.stringify(info, null, 1));
@@ -235,7 +232,7 @@ const PROBES = {
           tabs: tabs.map(b => b.textContent),
           handler,
           classes: [...new Set(cls.filter(c => typeof c === 'string'))].slice(0, 16),
-          injected: Boolean(document.querySelector('button[data-dolhk-tab]')),
+          injected: Boolean(document.querySelector('span[data-dolhk-tab]')),
         };
       })()`);
       console.log(`PROBE ${label}: ${JSON.stringify(info)}`);

@@ -1,4 +1,4 @@
-import { stateTemp, wikifyEval } from '../../host/game';
+import { wikifyEval } from '../../host/game';
 import { invalidateLang, t } from '../i18n';
 
 /** 面板内容的渲染入口，由装配层注入，避免与 panel/index 互相引用 */
@@ -8,49 +8,36 @@ let render: Renderer | null = null;
 
 let tabEl: HTMLButtonElement | null = null;
 let tabBar: HTMLElement | null = null;
-let tabObserver: MutationObserver | null = null;
-let pendingScan = false;
 
-function refreshTabCollection(): void {
-  const api = stateTemp()?.tab;
-  if (!api || !window.jQuery) return;
-  api.tabs = window.jQuery('#overlayTabs').find('button');
+/** preload 插进 `titleOptions` 的标记；分页按钮本身是原版 `<<button>>` */
+const MARK = 'span[data-dolhk-tab]';
+
+function findTab(bar: HTMLElement): HTMLButtonElement | null {
+  const mark = bar.querySelector<HTMLElement>(MARK);
+  return mark ? (mark.closest('button') as HTMLButtonElement | null) : null;
 }
 
-function activateTab(): void {
-  const content = document.getElementById('customOverlayContent');
-  if (!tabBar || !content || !tabEl || !render) return;
-  const buttons = [...tabBar.querySelectorAll('button')];
-  for (const node of buttons) node.classList.toggle('tab-selected', node === tabEl);
-  const api = stateTemp()?.tab;
-  if (api) {
-    refreshTabCollection();
-    api.activeTab = buttons.indexOf(tabEl);
-  }
-  content.textContent = '';
-  content.appendChild(render());
-  content.scrollTop = 0;
-  window.jQuery?.(content).scrollTop(0);
-}
-
-/** 点其他分页时取消本页高亮，避免两个分页同时处于选中态 */
-function onDocumentClick(event: MouseEvent): void {
-  if (!tabEl) return;
-  const target = event.target as Element | null;
-  if (!target || tabEl.contains(target)) return;
-  const bar = tabEl.parentElement;
-  if (!bar || !bar.contains(target)) return;
-  if (!target.closest('button')) return;
-  tabEl.classList.remove('tab-selected');
-}
-
-export function updateTabLabel(): void {
-  if (!tabEl) return;
+/**
+ * 把当前文案写进 `setup`，`titleOptions` 渲染分页时直接取用。
+ * 分页一出现就是正确语言，不会先显示占位文案再被改掉。
+ */
+export function publishLabel(): void {
+  const setup = (window as unknown as { setup?: Record<string, unknown> }).setup;
+  if (!setup) return;
   const label = t().tab;
-  if (tabEl.textContent !== label) tabEl.textContent = label;
+  if (setup.DoLHKTab !== label) setup.DoLHKTab = label;
 }
 
-/** 设置覆盖层出现时补上本模组分页；切走时清空引用 */
+/** 同步已有分页的文案；结构与宽度仍走原版分页规则 */
+export function updateTabLabel(): void {
+  publishLabel();
+  const mark = document.querySelector<HTMLElement>(`#overlayTabs ${MARK}`);
+  if (!mark) return;
+  const label = t().tab;
+  if (mark.textContent !== label) mark.textContent = label;
+}
+
+/** 缓存分页引用；分页由 preload 插入，这里不创建也不删除任何节点 */
 export function ensureTab(): void {
   const bar = document.getElementById('overlayTabs');
   const key = document.getElementById('customOverlay')?.getAttribute('data-overlay') ?? '';
@@ -63,38 +50,26 @@ export function ensureTab(): void {
     tabBar = bar;
     invalidateLang();
   }
-  const existing = bar.querySelector<HTMLButtonElement>('button[data-dolhk-tab]');
-  if (existing) {
-    tabEl = existing;
-    updateTabLabel();
-    return;
-  }
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.dataset.dolhkTab = '1';
-  button.textContent = t().tab;
-  button.addEventListener('click', activateTab);
-  bar.appendChild(button);
-  tabEl = button;
-  refreshTabCollection();
+  tabEl = findTab(bar);
+  updateTabLabel();
+}
+
+/** 分页内容由 `hotkeysPanel` widget 调这里渲染 */
+export function renderInto(): void {
+  // 必须避开 `<<replace>>` 自己的渲染过程：它先清空目标再写入内容，
+  // 同步挂载会被覆盖，等这一轮结束再填。
+  window.setTimeout(() => {
+    const content = document.getElementById('customOverlayContent');
+    if (!content || !render) return;
+    content.textContent = '';
+    content.append(render());
+    content.scrollTop = 0;
+    window.jQuery?.(content).scrollTop(0);
+  }, 0);
 }
 
 export function installTab(renderer: Renderer): void {
   render = renderer;
-  if (!tabObserver) {
-    // 覆盖层可能随段落一起重建（PassageHeader / Footer 也在 #passages 内），不能按目标节点过滤
-    tabObserver = new MutationObserver(() => {
-      if (pendingScan) return;
-      pendingScan = true;
-      setTimeout(() => {
-        pendingScan = false;
-        ensureTab();
-      }, 0);
-    });
-    tabObserver.observe(document.body, { childList: true, subtree: true });
-    document.addEventListener('click', onDocumentClick, true);
-  }
-  ensureTab();
 }
 
 /** 打开设置覆盖层并切到本模组分页 */
@@ -107,9 +82,8 @@ export function openPanel(): void {
   let attempts = 0;
   const focus = (): void => {
     ensureTab();
-    const tab = document.querySelector<HTMLButtonElement>('#overlayTabs button[data-dolhk-tab]');
-    if (tab) {
-      tab.click();
+    if (tabEl) {
+      tabEl.click();
       return;
     }
     attempts++;
